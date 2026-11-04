@@ -1,18 +1,63 @@
-# Sentinel Lite — Plan
+# Sentinel — Plan
 
-MCP-native, guardrailed technical-document assistant answering questions over `./docs` with citations.
-Also a test bed showing how LangChain, LangGraph, RAG, a vector DB, MCP, an agent harness and
-guardrails fit together, with per-role model routing.
+**Project: Sentinel — a security gateway for AI agents.** The RAG + MCP technical-document
+assistant from Phases 1–3 is retained as the **victim app**: a realistic agent with document
+retrieval, calculation tools, and write tools whose insecurity is what the gateway defends
+against. The **main deliverable is the gateway**: an enforcement layer that sits between an
+agent and its tools/LMs and enforces injection scanning, tool allowlists, argument validation,
+human approval for writes, and budgets — plus a **red-team suite of 100+ attacks** and a
+**comparison report of unprotected vs protected agents across ≥5 models** with block rate,
+false-positive rate, and latency overhead.
+
+Everything completed so far is kept as-is (phase-1 router, limiter, breaker, cache, probe).
+The victim app deliberately has the same shapes it would have had without the project pivot:
+standard LangChain/LangGraph calls and MCP tool invocations, so the gateway wraps *real* seams.
+
+## Threat model (one paragraph; full version lands in `docs/threat_model.md`)
+
+An attacker controls **content the agent will read** (documents, PDFs, tool results) and
+**chat input**, and wants the agent to: follow injected instructions, call disallowed or
+dangerous tools (writes, notes-as-data-channels), exfiltrate data into tool arguments or
+strings it would otherwise echo, or burn tokens/loops until quota dies. The gateway assumes
+the agent's LLM can be talked into anything and gives the model no direct tool access:
+every tool call and every model call passes through policy.
 
 ## Current environment (verified 2026-11-04)
 
 | Item | Status |
 |---|---|
-| Python | 3.14.6 on PATH. Target is **3.12** via `uv` — needs `uv` installed (`pip install uv` or winget) and pins in `pyproject.toml` (`requires-python = ">=3.12,<3.13"`). |
-| Repo | Git repo, empty except `.env` (never committed), `.gitignore`. |
-| `./docs` | **Empty.** Phases 2–3 need documents. Either you drop files in (PDF/MD: datasheets, manuals, standards) or I generate a small synthetic corpus (~8–10 realistic engineering docs across PDF/Markdown with tables, sections, cross-references, plus one doc containing a poisoned "indirect injection" payload for Phase 6). I will draft the corpus for your review if docs are still empty at Phase 1 end. |
+| Python | 3.12.16 project venv via `uv` (global Python untouched); `uv sync`/`uv run` workflow. |
+| Repo | Phase 1 committed (`bb7871a`): router + limiter + breaker + cache + call log + probe + 21 offline tests. |
+| `./docs` | Still empty — user will add real PDFs; synthetic corpus goes into a **separate `./docs_synthetic`** (incl. one poisoned PDF), both reviewed before use. |
+| Cloudflare | **Token fixed 2026-11-04** (embeddings verified live in the Phase-2 build); chat/guard ids get a formal re-probe at Phase 5/6. |
 
-## Provider facts (verified against docs; to be re-verified per phase)
+## Phase 2 results (2026-11-04, seed set: 17 questions over `docs_synthetic`, 9 docs, `internal` access, Cohere rerank chain)
+
+| arm (chunking × embedding) | recall@1 | recall@3 | recall@5 | MRR@10 | refusal* |
+|---|---|---|---|---|---|
+| structure × cohere embed-v5.0-pro | **0.643** | **1.000** | **1.000** | **0.821** | 0.60 |
+| structure × cohere embed-v4.0 | 0.643 | 1.000 | 1.000 | 0.821 | 0.60 |
+| structure × cf bge-large-en-v1.5 | 0.643 | 1.000 | 1.000 | 0.821 | 0.60 |
+| recursive × cohere embed-v5.0-pro | 0.500 | 0.571 | 0.571 | 0.524 | 0.67 |
+| recursive × cohere embed-v4.0 | 0.500 | 0.571 | 0.571 | 0.524 | 0.67 |
+| recursive × cf bge-large-en-v1.5 | 0.500 | 0.571 | 0.571 | 0.524 | 0.67 |
+
+Findings & caveats (honest):
+1. **Chunking dominates; embedding choice is a wash.** Structure-aware chunking beats recursive
+   everywhere (+0.14 recall@1, +0.08 MRR). With the same chunks + the rerank chain, all three
+   embedders produced identical ranked outcomes — differences only show without rerank or on a
+   larger corpus. `structure × cohere embed-v5.0-pro` is the default going forward.
+2. **Rerank scoring previously fell back to RRF silently under free-tier 429s** — now the
+   rerank path paces through the central limiter, is cached, and reports `rerank_health`
+   per arm; the table above is real Cohere rerank scoring.
+3. **Refusal threshold collision:** answerable top-scores 0.279–0.781 vs unanswerable
+   0.095–0.329 overlap (S08 0.322 vs S17 0.329) — a pure threshold cut caps refusal precision
+   at ~0.67 on this set (default 0.35 keeps 3/3 true refusals, cost: 2 false refusals).
+   Phase 3 tunes thresholds against the dev set only — larger question set may separate better.
+4. The poisoned doc QA-VX-7 appears in top-5 for related-but-ignorant queries (internal users);
+   expected — quarantining is the Phase-6 gateway's job, not retrieval's.
+
+## Provider facts (verified against docs; re-verified per phase)
 
 ### Phase 1 live probe results (2026-11-04, on the user's real keys — `results/model_probe.json`)
 
@@ -26,113 +71,129 @@ guardrails fit together, with per-role model routing.
 | groq `qwen/qwen3.8-27b` (judge) | chat, structured JSON, tool calling | 129 ms |
 | openrouter `nvidia/nemotron-3-ultra-550b-a55b:free` (judge) | chat, structured JSON | 1120 ms |
 | cohere `command-r7b-12-2024` (cheap) | chat, structured JSON | 537 ms |
-| groq `llama-prompt-guard-2-86m` (injection_guard) | classify: benign 0.0004, injection 0.9995 (clean separation) | 169 ms |
+| groq `llama-prompt-guard-2-86m` (injection_guard) | classify: benign 0.0004, injection 0.9995 | 169 ms |
 | groq `llama-prompt-guard-2-22m` (injection_guard) | classify: benign 0.0006, injection 0.9990 | 135 ms |
-| groq `openai/gpt-oss-safeguard-20b` (safety_guard) | reachable; behaves as a safe-completion chat model, not a label classifier → Phase 6 wraps it in a classification-verification pass | 420 ms |
+| groq `openai/gpt-oss-safeguard-20b` (safety_guard) | reachable; safe-completion chat style, not a label classifier → gateway wraps it in a classification-verification pass | 420 ms |
 | cohere `embed-v5.0-pro` | dims 2048 | 727 ms |
 | cohere `embed-v4.0` | dims 1536 | 755 ms |
-| cohere `rerank-v5.0-pro` / `rerank-v4.0-pro` | both return correct top result (Washington D.C.) | 479/480 ms |
+| cohere `rerank-v5.0-pro` / `rerank-v4.0-pro` | both return correct top result | 479/480 ms |
 
 **Failing (not code-side fixable):**
 
-1. **All Cloudflare calls return 401 "Authentication error"** — chat via the `/ai/v1` OpenAI-compatible endpoint *and* embeddings via the documented REST `/ai/run/{model}` path. The request shape is correct per CF docs, so the token almost certainly lacks **Workers AI** permission (or is the wrong token type). → User action: create/regenerate the API token with Workers AI edit permission. Until then every `cloudflare` chain entry is auto-fallback poison; they stay in `models.yaml` (the router skips them fast) but should be considered inactive.
-2. **openrouter `google/gemma-4-31b-it:free`** — basic reply worked once, then HTTP 429 on subsequent calls → free-tier rate friction exactly as the instructions warned. It stays in the answer chain at the bottom; the fallback machinery handles it. The probe rate-limiter spends 6 s spacing on OpenRouter; real runs will face the same friction and drain to the next model quickly.
-3. **openrouter `nvidia/nemotron-3.5-content-safety:free`** — HTTP 404 from the provider; id not served. Kept in `models.yaml` per instruction until you (user) confirm replacement; it is effectively dead weight for the safety_guard chain (the groq entry covers the role).
+1. ~~All Cloudflare calls return 401~~ — **resolved 2026-11-04 during Phase 2**: after the user
+   regenerated the token, all Cloudflare arms (chat test earlier + `@cf/baai/bge-large-en-v1.5`
+   embedding builds) succeed on the new token. CF is re-enabled as the embeddings comparison
+   and fallback provider. A formal re-probe of the other CF chat/guard ids happens at Phase 5/6.
+2. **openrouter `google/gemma-4-31b-it:free`** — 429 free-tier friction on repeat calls; kept
+   last in the answer chain; fallback machinery handles it.
+3. **openrouter `nvidia/nemotron-3.5-content-safety:free`** — HTTP 404; id not served. Kept
+   in `models.yaml` per instruction; Phase 8 (user-approved) will pick the next best safety id.
 
-`models.yaml` diff proposal from the probe: the generated order proposal equals the current file order (both failing entries are already last in their chains), so **no permanent change is needed now**; the demotion proposal is stored in `results/model_probe.json` and can be re-applied by re-running the probe at any time.
+`models.yaml` demotion proposal is stored in `results/model_probe.json`; current file order
+already matches it, so no permanent change was applied.
 
-- **Cohere** — chat models confirmed live: `command-a-plus-05-2026`, `command-a-reasoning-08-2025`, `command-r7b-12-2024`. Embeddings verified callable: `embed-v5.0-pro` (2048-d) and `embed-v4.0` (1536-d). Rerank verified: `rerank-v5.0-pro`, `rerank-v4.0-pro` (ground-truth-correct reranking result). Free-tier rate limits from the `docs.cohere.com/v2/docs/rate-limits` page feed the central limiter.
-- **Cloudflare Workers AI** — REST format from docs confirmed as `POST https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/run/{model}`; embeddings ids `@cf/baai/bge-large-en-v1.5` (1024-d), `@cf/baai/bge-m3` still listed in docs, but the account is 401-blocked (above) so they could not be validated.
-- **Groq / OpenRouter** — OpenAI-compatible endpoints; exact IDs re-verified live in the phase-1 probe (table above).
+- **Cohere** — chat `command-a-plus-05-2026`, `command-a-reasoning-08-2025`, `command-r7b-12-2024`; embed `embed-v5.0-pro` (2048-d), `embed-v4.0` (1536-d); rerank `rerank-v5.0-pro`, `rerank-v4.0-pro`. Free-tier rate limits: `docs.cohere.com/v2/docs/rate-limits`.
+- **Cloudflare Workers AI** — request shape confirmed from docs; token regenerated and working
+  since 2026-11-04 (embeddings verified live, `@cf/baai/bge-large-en-v1.5` built all Phase-2 arms).
+  Chat/guard ids (`@cf/meta/llama-guard-3-8b` etc.) get a formal re-probe at Phase 5/6.
+- **Groq / OpenRouter** — OpenAI-compatible endpoints; exact ids re-verified live (table above).
 
-## Architecture
-
-```
-                       ┌────────────────────────────────────────────────┐
-models.yaml ───────────►  ROLE ROUTER (Phase 1)                          │
-  roles + fallback     │  provider call adapters (groq/cohere/cf/OR)    │
-  chains               │  central rate limiter • backoff+jitter         │
-                       │  on-disk cache • circuit breaker (3→skip 10m)  │
-                       └───┬───────────────┬───────────────┬────────────┘
-                           │ answer/judge/ │ cheap         │ injection/safety guard
-                           ▼               ▼               ▼
-┌──────────────────┐   ┌───────────────────────────┐   ┌────────────────┐
-│ INGEST (Ph 2)    │   │ LANGGRAPH AGENT (Ph 5)    │   │ GUARDRAILS(Ph 6)│
-│ parse→chunk→     │   │ route→retrieve→call_tool  │   │ input /retrieval│
-│ embed→Chroma     │   │ →draft→verify→finish      │   │ /tool/output    │
-│ access_label meta│   │ state+budgets+checkpoints │   │ allow/block/…   │
-└────────┬─────────┘   └────────────┬──────────────┘   └───────┬────────┘
-         │                          │                          │
-         ▼                          ▼                          ▼
-   Chroma (local)          MCP servers (Ph 4):             eval suites + JSONL
-   hybrid BM25+vector,      docs_search / eng_calc /       audit log
-   rerank (Cohere→CF)       notes_tasks (approval-gated)
-                           ┌───────────────────────────┐
-evals (Ph 3) ─────────────►EVALS + SHOOT-OUT (Ph 3/8)     │
-results/ baselines,         recall@k, MRR, faithfulness,  │
-results/model_comparison.md block rate / false-positive rate│
-```
-
-(Diagram grows a mermaid version in `README.md` at Phase 7.)
-
-## File layout (target)
+## Architecture (pivot)
 
 ```
-sentinel/
-  pyproject.toml             uv + ruff + pytest config; deps w/ justification
-  models.yaml                role → ordered {provider, model, capabilities} chains
-  .env.example               COHERE_API_KEY, CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID,
-                             OPENROUTER_API_KEY, GROQ_API_KEY
-  .gitignore                 excludes .env, .venv, cache/, results/raw/, *.db
+                    ┌─────────────────────────────────────────────┐
+models.yaml ────────► RFC: ROLE ROUTER (Ph 1, done)               │
+                    │ limiter • backoff • cache • breaker • log   │
+                    └──────┬──────────────────────┬───────────────┘
+                           │                      │
+             ┌─────────────▼───────────┐  ┌───────▼──────────────────────┐
+             │ VICTIM AGENT (Ph 4-5)   │  │ SENTINEL GATEWAY (Ph 6, main)│
+             │ LangGraph RAG + MCP     │  │ input guard  (injection+PII) │
+             │ docs_search / eng_calc  │  │ retrieval guard (score, ACL, │
+             │ notes_tasks (writes)    │  │   quarantine poisoned chunks)│
+             │ "gateway: OFF" run mode │  │ tool guard (allowlist,      │
+             └─────────┬───────────────┘  │   Pydantic args, approval,   │
+                       │                  │   budgets)                   │
+                       │   every model &  │ output guard (citation check,│
+                       │   tool call      │   safety, no leakage)        │
+                       └──── interposed ──►│ + JSONL audit log            │
+                                           └──────┬───────────────────────┘
+  Ph 2: RAG corpus/vector DB for the victim (docs + docs_synthetic, PoC PDF is corpus)
+  Ph 3: RED-TEAM SUITE — 100+ attacks in evals/attacks.jsonl (direct injection,
+        poisoned PDF, tool abuse, exfiltration, token-burn loops) + benign set (FPR)
+  Ph 7-8: dashboard + side-by-side demo + unprotected vs protected over ≥5 models
+        (block rate, false-positive rate, latency overhead) → results/
+```
+
+The gateway is an **interposable layer, not a rewrite**: the victim agent calls gateway
+functions (`gw.pass_input`, `gw.pass_retrieval`, `gw.check_tool`, `gw.pass_output`) that are
+trivially no-ops when `gateway: off`, so the same agent graph runs for both arms of every
+comparison. Turn-level decisions: `allow / block / rewrite / escalate` + reason, always logged.
+
+## File layout (target, unchanged parts kept)
+
+```
+sentinel-lite/                   (repo root D:\sentinel)
+  pyproject.toml models.yaml .env.example .gitignore      # done, phase 1
   sentinel/
-    config.py                Pydantic settings; loads .env + models.yaml (no secrets printed)
-    router/                  role router, per-provider adapters, limiter, breaker, cache, call log
-    ingest/                  parse(PDF/MD)→clean→chunk(2 strategies)→embed→Chroma
-    retrieval/               hybrid search, rerank, access filter, threshold
-    guards/                  injection_guard, safety_guard, rules, PII, injection quarantine
-    agent/                   LangGraph graph: route/retrieve/call_tool/draft/verify/finish
-    mcp_servers/             docs_search, eng_calc, notes_tasks (official MCP Python SDK)
-    app/                     CLI (`python -m sentinel ask`), FastAPI + minimal web page
-    audit/                   JSONL audit-log writer
-  scripts/                   probe_models.py, compare_chunking.py, ...
-  evals/ questions.jsonl attacks.jsonl
-  results/                   model_probe.json, baselines, model_comparison.md
-  tests/                     unit + guardrail + agent tests (pytest, no network where possible)
-  docs/                      your documents (empty today)
+    config.py                                            # done
+    router/                                              # done (Ph 1)
+    ingest/ retrieval/                                    # Ph 2 victim RAG
+    mcp_servers/  docs_search, eng_calc, notes_tasks       # Ph 4 victim tools
+    agent/        LangGraph victim graph (route/retrieve/call_tool/draft/finish)
+    gateway/      input / retrieval / tool / output guards + audit writer  # Ph 6 (main)
+    dashboard/    FastAPI + web page: side-by-side demo & red-team report viewer # Ph 7
+    redteam/      attack runner + scorers (block rate, FPR, latency overhead)   # Ph 3/8
+  evals/ questions.jsonl attacks.jsonl          # Ph 3: 100+ attacks + benign set
+  results/ baselines, model_probe.json, gateway_comparison.md, model_comparison.md
+  docs/docs_synthetic/                          # real docs vs synthetic corpus
   README.md docs/threat_model.md
 ```
 
-## Key decisions
+## Key decisions (delta from phase-1 state; existing decisions unchanged)
 
-1. **uv + Python 3.12**, pinned. Ruff + pytest wired in `pyproject.toml`.
-2. **Direct provider calls / OpenAI-compat** for Groq, Cloudflare, OpenRouter (`langchain-openai` with custom `base_url`, one class each); **`langchain-cohere`** for Cohere chat/embeddings/rerank. Justifications: exact model control and a single `base_url` override beat per-vendor SDKs except where a vendor needs its own (Cohere).
-3. **One central rate limiter per provider** (token-bucket keyed by provider, sizes set from each provider's documented free tier), **exponential backoff + jitter**, **sqlite/backoff-free on-disk response cache** keyed by `(provider, model, prompt-hash, params)`, per-run **token + step budget enforced in the router and graph**, all exceptions → next chain entry; 3 consecutive failures → circuit open 10 min. Every call logged: provider, model, latency, token counts.
-4. **Vector DB: Chroma** (`chromadb` persistent, local, zero server). Justified as the lowest-friction embedded option for a folder-scale corpus; `lancedb` swap only if Chroma fights us.
-5. **Chunking**: heuristic structure-aware splitter (headings/tables/page breaks via PDF text layout) vs `RecursiveCharacterTextSplitter` baseline — compared in Phase 2, reported recall@k/MRR, winner becomes default.
-6. **Embedding comparison**: Cohere embed vs `@cf/baai/bge-large-en-v1.5` on the same chunks and eval set; separate Chroma collections to avoid cross-embedding-space errors.
-7. **Model ids**: only explicit ids, always probe-checked. Probe auto-demotes any `answer`-chain model failing tool-calling and writes `results/model_probe.json`; you see the diff before I change `models.yaml` permanently.
-8. **No frameworks for guardrails** — four small, pure-Python, independently testable layers returning `allow/block/rewrite/escalate` + reason.
-9. **Minimal deps** (each justified in a line): `langchain-core`, `langchain-cohere` (Cohere integration + rerank), `langchain-openai` (OpenAI-compat endpoints), `langgraph` (stateful graph + checkpoints), `chromadb`, `pydantic`, `python-dotenv` (or stdlib `.env` parsing — prefer stdlib), `pypdf` (PDF text), `httpx` (HTTP with timeouts), `click` (CLI), `fastapi` + `uvicorn` (Phase 7 only), `pytest`, `ruff`. `mcp` (official SDK) at Phase 4 only. Anything beyond that is a "justify or drop" conversation.
+1. **Gateway as functions, not a framework.** No guardrail library. Each guard is a pure
+   function `Decision(allow|block|rewrite|escalate, reason, modified_payload?)`, independently
+   testable, and composable. `AGENTS.md` already bans frameworks here.
+2. **Same agent binary, two modes.** `gateway: on|off` is runtime config, not a code fork —
+   the unprotected arm of the comparison is the *real* victim, not a strawman.
+3. **Attack corpus is versioned data, not scripts.** `evals/attacks.jsonl` rows carry
+   category, payload, target_role, expected gateway behavior, and source-of-truth for the score.
+4. **Red-team runner reuse of Phase 1 machinery.** Attacks run through the same router
+   (limiter/breaker/cache/budgets), so a 100+ attack sweep across 5 models stays inside free tiers.
+5. **Write approval is a gateway property, not an agent convention.** `notes_tasks` stays
+   exactly as unsafe as any raw MCP write tool; the gateway's tool guard is what gates it.
+   Write target remains `D:\sentinel\notes\` (git-ignored, path-jail enforced by the tool).
+6. **Metrics model:** every attack × model × mode produces one scored event: blocked, allowed
+   (bad), false-positive (benign blocked), latency overhead vs the same call unprotected.
+7. **Red-team rules (user, 2026-11-04):** (a) the attack suite is split into
+   `attacks_dev.jsonl` (~70%) and `attacks_heldout.jsonl` (~30%) — the gateway is tuned against
+   dev only; heldout stays unread until the Phase 8 report, which reports both sets separately.
+   (b) Every attack runs 3× per (model, mode); results are success-rate-with-spread, never a
+   single observation.
+8. **Few new deps** this pivot: nothing beyond the current set foreseen; dashboards use
+   FastAPI (already planned, Phase 7) and render from the JSONL audit log + results JSONs.
 
-## Phase plan & exit criteria
+## Phase plan & exit criteria (revised)
 
 | Phase | Deliverable | Exit |
 |---|---|---|
-| 0 (now) | `PLAN.md`, `AGENTS.md` | your approval |
-| 1 | router + `models.yaml` + limiter/breaker/cache + `scripts/probe_models.py` → `results/model_probe.json`; chains fixed to models that actually work | pytest green (router fallback, breaker, demotion logic tested offline w/ fakes); probe results shown; commit; pause |
-| 2 | ingest + Chroma + hybrid retrieval + rerank + threshold; chunking × embedding comparison report | recall@k / MRR table shown; commit; pause |
-| 3 | `evals/questions.jsonl` (40+ questions drafted with you) + eval harness + `make eval` + baselines in `results/` | table shown + 10 judge spot-checks with you; commit; pause |
-| 4 | 3 MCP servers + registration + external-client proof (e.g. MCP Filesystem-style client or script using `mcp` client) | inspector + external call demo shown; commit; pause |
-| 5 | LangGraph agent w/ budgets, checkpoints, HITL pause/resume, streaming trace; agent evals | forced-failure recovery + step/budget tests green; commit; pause |
-| 6 | 4 guardrail layers + `evals/attacks.jsonl` (30+ attacks) + normal set; block-rate / false-positive report | you spot-check false positives; commit; pause |
-| 7 | CLI + FastAPI streaming + web page + JSONL audit log | end-to-end demo; README w/ mermaid; commit; pause |
-| 8 | shoot-out: ≥3 candidates/role (small + large each) → `results/model_comparison.md`; `models.yaml` updated | comparison table you can act on |
+| ~~0~~ ~~1~~ | planning, router, probes — done, committed | ✔ done |
+| 2 | Victim RAG: ingest → chunk (2 strategies) → embed (Cohere vs CF) → Chroma; hybrid retrieval + rerank + access filter + threshold | recall@k / MRR table shown; commit; pause |
+| 3 | **Red-team + eval suite**: `evals/questions.jsonl` benign set (40+, drafted with you) and `evals/attacks.jsonl` — **100+ attacks** across direct injection, poisoned PDF, tool abuse, exfiltration, token-burn loops — plus the attack runner and scorers (expected-behavior labels; runs on unprotected agent) | attack list reviewed by you (esp. any you want added/removed); commit; pause |
+| 4 | Victim agent core: RAG answerer + 3 MCP servers (docs_search, eng_calc, notes_tasks) wired to real tools, registered in **this project's** opencode config (exact config change shown before saving) | MCP inspector + external-client proof shown; commit; pause |
+| 5 | Victim agent harness: LangGraph graph (route→retrieve→call_tool→draft→finish) with step/token caps as *agent-side* knobs; compiled with `gateway=OFF`; red-team baseline run `unprotected vs attacks.jsonl` → `results/baseline_redteam.json` | baseline block/near-zero shown alongside a issues-review; commit; pause |
+| 6 | **THE GATEWAY (main phase)**: four guards (input, retrieval, tool, output) as interposable decisions; injection classifier + rules; poisoned-chunk quarantine; tool allowlist + Pydantic arg validation + write-approval (HITL, exact args shown, resume-on-approve) + per-run budgets; output citation/safety/leakage check; JSONL audit log every decision | unit tests per guard + you spot-check FPs; commit; pause |
+| 7 | Dashboard + side-by-side demo: unprotected vs protected runs of the same questions side by side in a minimal local web UI (answer, citations, tool trace, gateway decisions, model-per-step); `make redteam` returns the sweep | demo recorded/run live for you; commit; pause |
+| 8 | Report: unprotected vs protected across **≥5 models** from models.yaml (groq gpt-oss-120b, cohere command-a-plus, cohere command-r7b, groq qwen3.8, openrouter nemotron at minimum; one small + one large per family where available) on block rate, false-positive rate, latency overhead; **two reports**: `results/gateway_comparison.md` (per-model) and updated `results/model_comparison.md` (which models stay usable under the gateway) | tables + go/no-go recommendation per model; final commit |
 
-Every phase ends with **tests → report → commit → stop for your go-ahead**.
+Every phase ends: tests → report → commit → stop for go-ahead.
 
-## Open questions for you
+## Open questions (blocked on you)
 
-1. **docs/ is empty** — do you have files to drop in, or shall I generate the synthetic engineering corpus (and a poisoned one) for your review?
-2. **uv is missing** — OK to install it (`pip install uv`) and pin Python 3.12?
-3. For Phase 4, register the 3 MCP servers in **this workspace's** opencode config, or ship an example config + instructions?
-4. `notes_tasks`' write target: files under `D:\sentinel\notes\` (git-tracked) as the write surface — acceptable?
+1. Cloudflare token Workers-AI permission (carried from Phase 1; unblocks cheap/safety fallbacks).
+2. Phase 8's dead-ish openrouter content-safety id: replace with a real id you have seen,
+   or let me drop it from `safety_guard` and pick `openrouter`'s next best safety-ish model at Phase 8?
+3. Approval interaction for Phase 6/7 writes: CLI prompt for the demo, plus a FastAPI
+   approve/deny endpoint for the dashboard — OK?
+4. Dashboard scope: single HTML page (no JS build step) over the audit log + results JSONs — OK?

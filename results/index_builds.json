@@ -1,0 +1,44 @@
+[
+  {
+    "strategy": "structure",
+    "provider": "cohere",
+    "model": "embed-v5.0-pro",
+    "collection": "rag_structure_embed-v5-0-pro",
+    "chunks": 47
+  },
+  {
+    "strategy": "structure",
+    "provider": "cohere",
+    "model": "embed-v4.0",
+    "collection": "rag_structure_embed-v4-0",
+    "chunks": 47
+  },
+  {
+    "strategy": "recursive",
+    "provider": "cohere",
+    "model": "embed-v5.0-pro",
+    "collection": "rag_recursive_embed-v5-0-pro",
+    "chunks": 21
+  },
+  {
+    "strategy": "recursive",
+    "provider": "cohere",
+    "model": "embed-v4.0",
+    "collection": "rag_recursive_embed-v4-0",
+    "chunks": 21
+  },
+  {
+    "strategy": "structure",
+    "provider": "cloudflare",
+    "model": "@cf/baai/bge-large-en-v1.5",
+    "collection": "rag_structure_cf_baai_bge-large-en-v1-5",
+    "chunks": 47
+  },
+  {
+    "strategy": "recursive",
+    "provider": "cloudflare",
+    "model": "@cf/baai/bge-large-en-v1.5",
+    "collection": "rag_recursive_cf_baai_bge-large-en-v1-5",
+    "chunks": 21
+  }
+]

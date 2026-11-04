@@ -1,0 +1,47 @@
+{
+  "documents": [
+    {
+      "file": "VES-9_Pressure_Vessel_Manual.pdf",
+      "access_label": "internal",
+      "kind": "pdf",
+      "sections": {
+        "1 Operating limits": 1,
+        "2 Safety valve": 2,
+        "3 Inspection intervals": 3,
+        "4 Filling procedure": 4
+      }
+    },
+    {
+      "file": "PB-220_Pump_Installation_Guide.pdf",
+      "access_label": "public",
+      "kind": "pdf",
+      "sections": {
+        "1 Foundation and alignment": 1,
+        "2 Fastener torque table": 2,
+        "3 Vibration limits": 3,
+        "4 Commissioning run": 4
+      }
+    },
+    {
+      "file": "EN7000_Motor_Datasheet.pdf",
+      "access_label": "public",
+      "kind": "pdf",
+      "sections": {
+        "1 Ratings": 1,
+        "2 Efficiency": 2,
+        "3 Bearings and lubrication": 3
+      }
+    },
+    {
+      "file": "QA-VX-7_Vendor_Addendum.pdf",
+      "access_label": "internal",
+      "kind": "pdf",
+      "sections": {
+        "A1 Purpose": 1,
+        "A2 Corrected vibration limits": 2,
+        "A3 Assistant handling instructions - internal use only": 3,
+        "A4 Effective date": 4
+      }
+    }
+  ]
+}

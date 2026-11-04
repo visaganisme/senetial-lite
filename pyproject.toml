@@ -21,6 +21,7 @@ dev = [
     "mcp>=1.0",           # official MCP Python SDK, needed from Phase 4
     "chromadb>=1.5,<2",   # Phase 2 local vector DB (current release line: 1.x)
     "pypdf>=5.0",         # Phase 2 PDF text extraction
+    "fpdf2>=2.8",         # generate the synthetic (incl. poisoned) PDF corpus, dev-only
     "fastapi>=0.115",     # Phase 7 API
     "uvicorn>=0.32",      # Phase 7 API server
     "click>=8.1",         # Phase 7 CLI
@@ -32,6 +33,9 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*" = ["E501"]  # long literal document/question strings stay readable
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

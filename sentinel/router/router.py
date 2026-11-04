@@ -92,7 +92,8 @@ def text_content(msg: Any) -> str | None:
         return c
     if isinstance(c, list):
         parts = [
-            b.get("text") for b in c
+            b.get("text")
+            for b in c
             if isinstance(b, dict) and b.get("type") == "text" and b.get("text")
         ]
         return "".join(parts) or None

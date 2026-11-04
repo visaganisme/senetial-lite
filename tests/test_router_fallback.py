@@ -13,8 +13,12 @@ from tests.fakes import FakeModel, FakeMsg, OkMsg, ServiceDown
 
 
 def runtime(entries: dict) -> Runtime:
-    roles = {"answer": [ChainEntry(provider="fake", model="unused-answer",
-                                   capabilities=["chat", "tools"])], **entries}
+    roles = {
+        "answer": [
+            ChainEntry(provider="fake", model="unused-answer", capabilities=["chat", "tools"])
+        ],
+        **entries,
+    }
     config_model = router_mod.ModelsConfig(
         roles=roles,
         limits={"fake": ProviderLimit(rpm=60_000, retries=2, timeout_s=5)},

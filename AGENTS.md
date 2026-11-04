@@ -47,3 +47,7 @@ DB + MCP + guardrails + per-role model routing. The phase plan lives in `PLAN.md
 - Only touch files in this project. Treat existing files as user work: investigate before
   modifying; never delete or overwrite anything without a reason stated up front.
 - `./docs` contents are read-only inputs for the assistant.
+- **NEVER run `ruff --fix` (or any file edit) while a comparison or probe run is in progress.**
+  Runs get moved to the background and finish when they finish; code changes wait for them.
+  Any result table must be verified non-trivially (illogical numbers e.g. all-zero recall
+  against a known-good manual query mean instrumentation bug, not reality) before reporting.

@@ -1,0 +1,66 @@
+{
+  "rows": [
+    {
+      "arm": "structure x cohere:embed-v5.0-pro",
+      "recall@1": 0.643,
+      "recall@3": 1.0,
+      "recall@5": 1.0,
+      "mrr@10": 0.821,
+      "refusal": 0.6,
+      "rerank_health": "below_threshold",
+      "avg_latency_ms": 6094
+    },
+    {
+      "arm": "structure x cohere:embed-v4.0",
+      "recall@1": 0.643,
+      "recall@3": 1.0,
+      "recall@5": 1.0,
+      "mrr@10": 0.821,
+      "refusal": 0.6,
+      "rerank_health": "below_threshold",
+      "avg_latency_ms": 9261
+    },
+    {
+      "arm": "structure x cloudflare:@cf/baai/bge-large-en-v1.5",
+      "recall@1": 0.643,
+      "recall@3": 1.0,
+      "recall@5": 1.0,
+      "mrr@10": 0.821,
+      "refusal": 0.6,
+      "rerank_health": "below_threshold",
+      "avg_latency_ms": 6065
+    },
+    {
+      "arm": "recursive x cohere:embed-v5.0-pro",
+      "recall@1": 0.5,
+      "recall@3": 0.571,
+      "recall@5": 0.571,
+      "mrr@10": 0.524,
+      "refusal": 0.67,
+      "rerank_health": "below_threshold",
+      "avg_latency_ms": 6062
+    },
+    {
+      "arm": "recursive x cohere:embed-v4.0",
+      "recall@1": 0.5,
+      "recall@3": 0.571,
+      "recall@5": 0.571,
+      "mrr@10": 0.524,
+      "refusal": 0.67,
+      "rerank_health": "below_threshold",
+      "avg_latency_ms": 6052
+    },
+    {
+      "arm": "recursive x cloudflare:@cf/baai/bge-large-en-v1.5",
+      "recall@1": 0.5,
+      "recall@3": 0.571,
+      "recall@5": 0.571,
+      "mrr@10": 0.524,
+      "refusal": 0.67,
+      "rerank_health": "below_threshold",
+      "avg_latency_ms": 6071
+    }
+  ],
+  "questions": "seed_questions.jsonl",
+  "generated": "2026-11-04T19:32:55"
+}

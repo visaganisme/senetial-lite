@@ -1,8 +1,9 @@
-"""On-disk response cache: cache/<xdomain>/<sha256>.json, optional TTL seconds."""
+"""On-disk response cache: cache/<namespace>/<sha256>.json, optional TTL seconds."""
 
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -17,7 +18,8 @@ class OnDiskCache:
         root.mkdir(parents=True, exist_ok=True)
 
     def _path(self, ns: str, key: str) -> Path:
-        sub = self.root / ns
+        safe = re.sub(r"[^A-Za-z0-9._-]+", "_", ns)  # ':' etc. are illegal on Windows
+        sub = self.root / safe
         sub.mkdir(parents=True, exist_ok=True)
         return sub / f"{key}.json"
 

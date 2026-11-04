@@ -57,7 +57,9 @@ class Runtime:
 
     @classmethod
     def load(cls, *, use_cache: bool = True) -> Runtime:
-        return cls(ModelsConfig.load(), use_cache=use_cache)
+        from sentinel.router.schema import load_models_config
+
+        return cls(load_models_config(), use_cache=use_cache)
 
     def limit_for(self, provider: str) -> ProviderLimit:
         return self.config.limits.get(provider, ProviderLimit())

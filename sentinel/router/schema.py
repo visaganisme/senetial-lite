@@ -54,6 +54,10 @@ class ModelsConfig(BaseModel):
             raise ValueError("models.yaml must define at least the 'answer' role")
         return roles
 
+    @classmethod
+    def load(cls, path: str | None = None) -> ModelsConfig:
+        return load_models_config(path)
+
 
 class RunBudget(BaseModel):
     """Hard per-run caps. Exceeded budget aborts the run with BudgetExceeded."""

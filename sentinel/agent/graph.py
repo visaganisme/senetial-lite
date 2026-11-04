@@ -47,14 +47,16 @@ def _create_agent_graph(runtime: Runtime, gateway: Any | None = None):
     def model_node(state: AgentState) -> dict[str, Any]:
         step = state.current_step + 1
         if step > state.max_steps:
-            return {
-                "current_step": step,
-                "status": "completed",
-                "final_answer": "Execution limit reached: Maximum steps exceeded.",
-            }
+            # Step exceeded: do one last synthesis invocation without tools
+            avail_tools = []
+        elif step == state.max_steps:
+            # On final step, don't offer tools; force the model to synthesize the final answer
+            avail_tools = []
+        else:
+            avail_tools = tools
 
         try:
-            call_res = call("answer", state.messages, runtime=runtime, tools=tools)
+            call_res = call("answer", state.messages, runtime=runtime, tools=avail_tools)
         except Exception as e:
             logger.error(f"Model invocation failed: {e}")
             return {
@@ -111,6 +113,7 @@ def _create_agent_graph(runtime: Runtime, gateway: Any | None = None):
         tool_calls = last_msg.get("tool_calls") or []
         new_messages = list(state.messages)
         trace = list(state.tool_trace)
+        decisions = list(state.gateway_decisions)
 
         for i, tc in enumerate(tool_calls):
             tname = tc.get("name")
@@ -121,6 +124,7 @@ def _create_agent_graph(runtime: Runtime, gateway: Any | None = None):
             # If gateway is ON and provided, check tool guard
             if state.gateway_mode == "on" and gateway is not None:
                 decision = gateway.check_tool(tname, targs, state)
+                decisions.append(decision.model_dump())
                 if decision.action == "block":
                     result_text = f"Gateway Blocked: {decision.reason}"
                     tool_entry["status"] = "blocked"
@@ -157,6 +161,30 @@ def _create_agent_graph(runtime: Runtime, gateway: Any | None = None):
             else:
                 try:
                     result_text = tool_fn.invoke(targs)
+                    # If docs_search and gateway is ON, inspect retrieved chunks
+                    if (
+                        state.gateway_mode == "on"
+                        and gateway is not None
+                        and tname == "docs_search"
+                    ):
+                        try:
+                            import json
+
+                            parsed_chunks = (
+                                json.loads(result_text)
+                                if isinstance(result_text, str)
+                                else result_text
+                            )
+                            if isinstance(parsed_chunks, list):
+                                ret_dec, cleaned = gateway.pass_retrieval(
+                                    parsed_chunks, user_access="internal"
+                                )
+                                decisions.append(ret_dec.model_dump())
+                                if len(cleaned) < len(parsed_chunks):
+                                    tool_entry["quarantined"] = len(parsed_chunks) - len(cleaned)
+                                result_text = json.dumps(cleaned)
+                        except Exception as err:
+                            logger.warning(f"Retrieval guard parsing failed: {err}")
                 except Exception as e:
                     result_text = f"Error executing tool {tname}: {e}"
 
@@ -172,7 +200,7 @@ def _create_agent_graph(runtime: Runtime, gateway: Any | None = None):
                 }
             )
 
-        return {"messages": new_messages, "tool_trace": trace}
+        return {"messages": new_messages, "tool_trace": trace, "gateway_decisions": decisions}
 
     def should_continue(state: AgentState) -> str:
         if state.status in ("completed", "error", "blocked"):

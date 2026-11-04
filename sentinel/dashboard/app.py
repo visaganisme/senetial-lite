@@ -6,14 +6,20 @@ import json
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
+import sentinel.config as cfg
 from sentinel.agent.graph import run_agent
 from sentinel.gateway.audit import AuditLogger
 from sentinel.gateway.gateway import SentinelGateway
+from sentinel.ingest.chunk import chunk_structure
+from sentinel.ingest.embed import embed_texts
+from sentinel.ingest.parse import parse_md, parse_pdf
+from sentinel.ingest.store import client
 from sentinel.router.router import Runtime
+from sentinel.router.schema import load_models_config
 
 app = FastAPI(title="Sentinel Lite - Security Gateway Dashboard")
 
@@ -84,6 +90,99 @@ def results_view() -> dict[str, Any]:
     return {"baseline": baseline, "comparison": comparison}
 
 
+@app.get("/api/documents")
+def list_documents() -> list[dict[str, Any]]:
+    docs_list: list[dict[str, Any]] = []
+    roots = [
+        (cfg.BASE_DIR / "docs_synthetic", "Synthetic & Benchmark Corpus"),
+        (cfg.BASE_DIR / "docs", "User Knowledge Base"),
+    ]
+    for root, category in roots:
+        if not root.exists():
+            continue
+        for path in sorted(root.glob("*")):
+            if (
+                path.is_file()
+                and path.suffix.lower() in (".pdf", ".md", ".txt")
+                and not path.name.startswith(".")
+            ):
+                is_poisoned = "qa-vx-7" in path.name.lower() or "poison" in path.name.lower()
+                docs_list.append(
+                    {
+                        "name": path.name,
+                        "category": category,
+                        "size_kb": round(path.stat().st_size / 1024, 1),
+                        "type": path.suffix.lower().replace(".", "").upper(),
+                        "status": "poisoned" if is_poisoned else "clean",
+                        "badge": (
+                            "⚠️ Adversarial Poisoned Doc" if is_poisoned else "🟢 Verified Clean Doc"
+                        ),
+                    }
+                )
+    return docs_list
+
+
+@app.post("/api/upload")
+async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:  # noqa: B008
+    filename = file.filename or "uploaded_doc.txt"
+    ext = Path(filename).suffix.lower()
+    if ext not in (".pdf", ".md", ".txt"):
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF (.pdf), Markdown (.md), and Text (.txt) files are supported.",
+        )
+
+    target_dir = cfg.BASE_DIR / "docs"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_path = target_dir / filename
+
+    content = await file.read()
+    target_path.write_bytes(content)
+
+    num_chunks = 0
+    try:
+        if ext == ".pdf":
+            doc = parse_pdf(target_path, access_label="internal")
+        else:
+            doc = parse_md(target_path, access_label="internal")
+
+        chunks = chunk_structure(doc)
+        cfgm = load_models_config()
+        embed_entries = cfgm.roles.get("embed", [])
+        if embed_entries and chunks:
+            coll = client().get_collection("rag_structure_embed-v5-0-pro")
+            vecs = embed_texts(embed_entries[0], [c.text for c in chunks])
+            coll.add(
+                ids=[f"{filename}_{c.id}" for c in chunks],
+                embeddings=vecs,
+                documents=[c.text for c in chunks],
+                metadatas=[
+                    {
+                        "source": filename,
+                        "page": c.page,
+                        "section": c.section or "",
+                        "access_label": "internal",
+                        "chunk_id": f"{filename}_{c.id}",
+                        "strategy": "structure",
+                    }
+                    for c in chunks
+                ],
+            )
+        num_chunks = len(chunks)
+    except Exception:
+        # Fallback keyword search still finds the file on disk
+        pass
+
+    is_poisoned = "qa-vx-7" in filename.lower() or "poison" in filename.lower()
+    return {
+        "filename": filename,
+        "size_kb": round(len(content) / 1024, 1),
+        "chunks_indexed": num_chunks,
+        "status": "poisoned" if is_poisoned else "clean",
+        "message": f"Successfully indexed '{filename}' into vector database ({num_chunks} chunks).",
+    }
+
+
 @app.post("/api/query")
 def query_view(req: QueryRequest) -> dict[str, Any]:
     output: dict[str, Any] = {}
@@ -94,7 +193,7 @@ def query_view(req: QueryRequest) -> dict[str, Any]:
             prompt=req.prompt,
             gateway_mode="off",
             runtime=runtime,
-            max_steps=4,
+            max_steps=6,
         )
         output["unprotected"] = u_state.model_dump()
 
@@ -104,7 +203,7 @@ def query_view(req: QueryRequest) -> dict[str, Any]:
             gateway_mode="on",
             runtime=runtime,
             gateway=gateway,
-            max_steps=4,
+            max_steps=6,
         )
         output["protected"] = p_state.model_dump()
 

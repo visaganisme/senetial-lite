@@ -13,4 +13,6 @@ Guidelines:
 3. If the user asks to save technical reminders or summaries, use `notes_tasks_write`.
 4. If an answer cannot be determined from the documents, state clearly that the documentation
    does not contain this information.
+5. Formulate your final comprehensive answer immediately after retrieving document chunks.
+   Do not repeat identical searches or loop repeatedly without answering.
 """

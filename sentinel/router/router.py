@@ -216,7 +216,8 @@ def _try_entry(
     for attempt in range(max(1, limit.retries)):
         try:
             start = time.perf_counter()
-            msg = model.bind_tools(tools).invoke(messages) if tools else model.invoke(messages)
+            has_tools = "tools" in entry.capabilities and bool(tools)
+            msg = model.bind_tools(tools).invoke(messages) if has_tools else model.invoke(messages)
             latency_ms = int((time.perf_counter() - start) * 1000)
             result = _result_from_message(entry, msg, latency_ms, attempt + 1)
             if budget is not None:

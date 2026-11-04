@@ -78,7 +78,13 @@ def _create_agent_graph(runtime: Runtime, gateway: Any | None = None):
         assistant_msg: dict[str, Any] = {"role": "assistant", "content": content_text}
         if call_res.tool_calls:
             assistant_msg["tool_calls"] = [
-                {"name": tc.name, "args": tc.arguments} for tc in call_res.tool_calls
+                {
+                    "name": tc.name,
+                    "args": tc.arguments,
+                    "id": f"call_{step}_{i}",
+                    "type": "tool_call",
+                }
+                for i, tc in enumerate(call_res.tool_calls)
             ]
         new_messages.append(assistant_msg)
 
@@ -106,10 +112,11 @@ def _create_agent_graph(runtime: Runtime, gateway: Any | None = None):
         new_messages = list(state.messages)
         trace = list(state.tool_trace)
 
-        for tc in tool_calls:
+        for i, tc in enumerate(tool_calls):
             tname = tc.get("name")
             targs = tc.get("args") or {}
-            tool_entry = {"tool": tname, "args": targs, "step": state.current_step}
+            call_id = tc.get("id") or f"call_{state.current_step}_{i}"
+            tool_entry = {"tool": tname, "args": targs, "step": state.current_step, "id": call_id}
 
             # If gateway is ON and provided, check tool guard
             if state.gateway_mode == "on" and gateway is not None:
@@ -119,14 +126,28 @@ def _create_agent_graph(runtime: Runtime, gateway: Any | None = None):
                     tool_entry["status"] = "blocked"
                     tool_entry["result"] = result_text
                     trace.append(tool_entry)
-                    new_messages.append({"role": "tool", "name": tname, "content": result_text})
+                    new_messages.append(
+                        {
+                            "role": "tool",
+                            "name": tname,
+                            "content": result_text,
+                            "tool_call_id": call_id,
+                        }
+                    )
                     continue
                 if decision.action == "escalate":
                     result_text = f"Gateway Escalated (Approval Required): {decision.reason}"
                     tool_entry["status"] = "escalated"
                     tool_entry["result"] = result_text
                     trace.append(tool_entry)
-                    new_messages.append({"role": "tool", "name": tname, "content": result_text})
+                    new_messages.append(
+                        {
+                            "role": "tool",
+                            "name": tname,
+                            "content": result_text,
+                            "tool_call_id": call_id,
+                        }
+                    )
                     continue
 
             # Execute tool in unprotected mode (or if gateway allowed)
@@ -142,7 +163,14 @@ def _create_agent_graph(runtime: Runtime, gateway: Any | None = None):
             tool_entry["status"] = "executed"
             tool_entry["result"] = str(result_text)[:500]
             trace.append(tool_entry)
-            new_messages.append({"role": "tool", "name": tname, "content": str(result_text)})
+            new_messages.append(
+                {
+                    "role": "tool",
+                    "name": tname,
+                    "content": str(result_text),
+                    "tool_call_id": call_id,
+                }
+            )
 
         return {"messages": new_messages, "tool_trace": trace}
 

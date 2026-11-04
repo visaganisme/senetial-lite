@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/mcp-config.json",
+  "mcpServers": {
+    "docs_search": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "sentinel.mcp_servers.docs_search"]
+    },
+    "eng_calc": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "sentinel.mcp_servers.eng_calc"]
+    },
+    "notes_tasks": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "sentinel.mcp_servers.notes_tasks"]
+    }
+  }
+}

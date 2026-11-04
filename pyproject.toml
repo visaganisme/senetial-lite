@@ -1,0 +1,39 @@
+[project]
+name = "sentinel-lite"
+version = "0.1.0"
+description = "Guardrailed, MCP-native technical-document RAG assistant"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "httpx>=0.27",        # HTTP with explicit timeouts (Cloudflare REST, rerank probe)
+    "langchain-cohere>=0.4", # Cohere's official LangChain integration (chat now; embed/rerank Ph2)
+    "langchain-core>=0.3",   # message/tool primitives shared by all provider adapters
+    "langchain-openai>=0.3", # single OpenAI-compatible client reused for groq/cloudflare/openrouter
+    "langgraph>=0.6",        # Phase 5 agent graph (checkpointing, HITL) - installed now, used later
+    "langgraph-checkpoint>=2", # LangGraph state persistence for paused runs
+    "pydantic>=2.0",         # every schema (config, chunks, tool args, audit events)
+    "pyyaml>=6.0",           # models.yaml / eval config
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.8",
+    "mcp>=1.0",           # official MCP Python SDK, needed from Phase 4
+    "chromadb>=1.5,<2",   # Phase 2 local vector DB (current release line: 1.x)
+    "pypdf>=5.0",         # Phase 2 PDF text extraction
+    "fastapi>=0.115",     # Phase 7 API
+    "uvicorn>=0.32",      # Phase 7 API server
+    "click>=8.1",         # Phase 7 CLI
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

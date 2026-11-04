@@ -1,0 +1,40 @@
+# Role -> ordered fallback chain. provider = first segment of the model id, model = the rest.
+# Exact ids only (no aliases, no ~latest). probe_models.py validates every entry on real keys
+# and demotes failed "answer" models automatically (results/model_probe.json).
+# capabilities: chat | structured | tools | classify | embed | rerank
+roles:
+  answer: # RAG + tool calling
+    - { provider: groq, model: openai/gpt-oss-120b, capabilities: [chat, structured, tools] }
+    - { provider: cohere, model: command-a-plus-05-2026, capabilities: [chat, structured, tools] }
+    - { provider: cloudflare, model: "@cf/openai/gpt-oss-120b", capabilities: [chat, structured, tools] }
+    - { provider: openrouter, model: google/gemma-4-31b-it:free, capabilities: [chat, structured, tools] }
+  judge: # evals LLM; must be a different family from the answer model
+    - { provider: cohere, model: command-a-reasoning-08-2025, capabilities: [chat, structured] }
+    - { provider: groq, model: qwen/qwen3.8-27b, capabilities: [chat, structured, tools] }
+    - { provider: openrouter, model: nvidia/nemotron-3-ultra-550b-a55b:free, capabilities: [chat, structured] }
+  cheap: # query rewriting, routing, summaries
+    - { provider: cloudflare, model: "@cf/meta/llama-3.1-8b-instruct-fp8", capabilities: [chat, structured] }
+    - { provider: cohere, model: command-r7b-12-2024, capabilities: [chat, structured] }
+  injection_guard: # classifier (prompt-injection detector), probed separately, not a chat tool
+    - { provider: groq, model: meta-llama/llama-prompt-guard-2-86m, capabilities: [classify] }
+    - { provider: groq, model: meta-llama/llama-prompt-guard-2-22m, capabilities: [classify] }
+  safety_guard: # content / output safety
+    - { provider: cloudflare, model: "@cf/meta/llama-guard-3-8b", capabilities: [classify] }
+    - { provider: groq, model: openai/gpt-oss-safeguard-20b, capabilities: [classify] }
+    - { provider: openrouter, model: nvidia/nemotron-3.5-content-safety:free, capabilities: [classify] }
+  embed:
+    - { provider: cohere, model: embed-v5.0-pro, capabilities: [embed] }
+    - { provider: cohere, model: embed-v4.0, capabilities: [embed] }
+    - { provider: cloudflare, model: "@cf/baai/bge-large-en-v1.5", capabilities: [embed] }
+    - { provider: cloudflare, model: "@cf/baai/bge-m3", capabilities: [embed] }
+  rerank:
+    - { provider: cohere, model: rerank-v5.0-pro, capabilities: [rerank] }
+    - { provider: cohere, model: rerank-v4.0-pro, capabilities: [rerank] }
+
+# Free-tier survival knobs. rpm = conservative per-provider requests/minute cap consumed by the
+# central rate limiter. Retries use exponential backoff + jitter (max 3 tries per chain entry).
+limits:
+  cohere: { rpm: 10, retries: 3, timeout_s: 45 }
+  groq: { rpm: 20, retries: 3, timeout_s: 45 }
+  cloudflare: { rpm: 20, retries: 3, timeout_s: 45 }
+  openrouter: { rpm: 10, retries: 3, timeout_s: 45 }

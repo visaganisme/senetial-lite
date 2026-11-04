@@ -1,0 +1,454 @@
+{
+  "generated_at": "2026-11-04T12:53:52.810159+00:00",
+  "keys_present": {
+    "COHERE_API_KEY": true,
+    "CLOUDFLARE_API_TOKEN": true,
+    "CLOUDFLARE_ACCOUNT_ID": true,
+    "OPENROUTER_API_KEY": true,
+    "GROQ_API_KEY": true
+  },
+  "roles": {
+    "answer": [
+      {
+        "provider": "groq",
+        "model": "openai/gpt-oss-120b",
+        "capabilities": [
+          "chat",
+          "structured",
+          "tools"
+        ],
+        "checks": {
+          "basic": {
+            "ok": true,
+            "latency_ms": 625,
+            "tokens_in": 85,
+            "tokens_out": 47,
+            "reply": "OK"
+          },
+          "structured": {
+            "ok": true,
+            "latency_ms": 543,
+            "tokens_in": 100,
+            "tokens_out": 94
+          },
+          "tools": {
+            "ok": true,
+            "latency_ms": 527,
+            "tokens_in": 137,
+            "tokens_out": 61,
+            "raw_tool_calls": [
+              {
+                "name": "add",
+                "args": {
+                  "a": 2,
+                  "b": 3
+                }
+              }
+            ]
+          }
+        },
+        "status": "ok"
+      },
+      {
+        "provider": "cohere",
+        "model": "command-a-plus-05-2026",
+        "capabilities": [
+          "chat",
+          "structured",
+          "tools"
+        ],
+        "checks": {
+          "basic": {
+            "ok": true,
+            "latency_ms": 1089,
+            "tokens_in": 41,
+            "tokens_out": 77,
+            "reply": "OK"
+          },
+          "structured": {
+            "ok": true,
+            "latency_ms": 831,
+            "tokens_in": 56,
+            "tokens_out": 126
+          },
+          "tools": {
+            "ok": true,
+            "latency_ms": 825,
+            "tokens_in": 265,
+            "tokens_out": 92,
+            "raw_tool_calls": [
+              {
+                "name": "add",
+                "args": {
+                  "a": 2,
+                  "b": 3
+                }
+              }
+            ]
+          }
+        },
+        "status": "ok"
+      },
+      {
+        "provider": "cloudflare",
+        "model": "@cf/openai/gpt-oss-120b",
+        "capabilities": [
+          "chat",
+          "structured",
+          "tools"
+        ],
+        "status": "error",
+        "error": "Error code: 401"
+      },
+      {
+        "provider": "openrouter",
+        "model": "google/gemma-4-31b-it:free",
+        "capabilities": [
+          "chat",
+          "structured",
+          "tools"
+        ],
+        "status": "error",
+        "error": "Error code: 429 - Provider returned error"
+      }
+    ],
+    "judge": [
+      {
+        "provider": "cohere",
+        "model": "command-a-reasoning-08-2025",
+        "capabilities": [
+          "chat",
+          "structured"
+        ],
+        "checks": {
+          "basic": {
+            "ok": false,
+            "latency_ms": 601,
+            "tokens_in": 1432,
+            "tokens_out": 9,
+            "reply": ""
+          },
+          "structured": {
+            "ok": true,
+            "latency_ms": 15394,
+            "tokens_in": 1446,
+            "tokens_out": 355
+          }
+        },
+        "status": "ok"
+      },
+      {
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "capabilities": [
+          "chat",
+          "structured",
+          "tools"
+        ],
+        "checks": {
+          "basic": {
+            "ok": true,
+            "latency_ms": 129,
+            "tokens_in": 28,
+            "tokens_out": 2,
+            "reply": "OK"
+          },
+          "structured": {
+            "ok": true,
+            "latency_ms": 134,
+            "tokens_in": 43,
+            "tokens_out": 12
+          },
+          "tools": {
+            "ok": true,
+            "latency_ms": 193,
+            "tokens_in": 295,
+            "tokens_out": 35,
+            "raw_tool_calls": [
+              {
+                "name": "add",
+                "args": {
+                  "a": 2,
+                  "b": 3
+                }
+              }
+            ]
+          }
+        },
+        "status": "ok"
+      },
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "capabilities": [
+          "chat",
+          "structured"
+        ],
+        "checks": {
+          "basic": {
+            "ok": true,
+            "latency_ms": 1120,
+            "tokens_in": 27,
+            "tokens_out": 20,
+            "reply": "OK"
+          },
+          "structured": {
+            "ok": true,
+            "latency_ms": 1511,
+            "tokens_in": 43,
+            "tokens_out": 60
+          }
+        },
+        "status": "ok"
+      }
+    ],
+    "cheap": [
+      {
+        "provider": "cloudflare",
+        "model": "@cf/meta/llama-3.1-8b-instruct-fp8",
+        "capabilities": [
+          "chat",
+          "structured"
+        ],
+        "status": "error",
+        "error": "Error code: 401"
+      },
+      {
+        "provider": "cohere",
+        "model": "command-r7b-12-2024",
+        "capabilities": [
+          "chat",
+          "structured"
+        ],
+        "checks": {
+          "basic": {
+            "ok": true,
+            "latency_ms": 537,
+            "tokens_in": 541,
+            "tokens_out": 4,
+            "reply": "OK"
+          },
+          "structured": {
+            "ok": true,
+            "latency_ms": 807,
+            "tokens_in": 555,
+            "tokens_out": 14
+          }
+        },
+        "status": "ok"
+      }
+    ],
+    "injection_guard": [
+      {
+        "provider": "groq",
+        "model": "meta-llama/llama-prompt-guard-2-86m",
+        "capabilities": [
+          "classify"
+        ],
+        "checks": {
+          "benign": {
+            "latency_ms": 169,
+            "tokens_in": 17,
+            "tokens_out": 0,
+            "raw": "0.0004049462149851024",
+            "score": 0.0004049462149851024
+          },
+          "injection": {
+            "latency_ms": 150,
+            "tokens_in": 37,
+            "tokens_out": 0,
+            "raw": "0.9995377063751221",
+            "score": 0.9995377063751221
+          }
+        },
+        "status": "ok"
+      },
+      {
+        "provider": "groq",
+        "model": "meta-llama/llama-prompt-guard-2-22m",
+        "capabilities": [
+          "classify"
+        ],
+        "checks": {
+          "benign": {
+            "latency_ms": 135,
+            "tokens_in": 16,
+            "tokens_out": 0,
+            "raw": "0.000621554849203676",
+            "score": 0.000621554849203676
+          },
+          "injection": {
+            "latency_ms": 125,
+            "tokens_in": 36,
+            "tokens_out": 0,
+            "raw": "0.9990509152412415",
+            "score": 0.9990509152412415
+          }
+        },
+        "status": "ok"
+      }
+    ],
+    "safety_guard": [
+      {
+        "provider": "cloudflare",
+        "model": "@cf/meta/llama-guard-3-8b",
+        "capabilities": [
+          "classify"
+        ],
+        "checks": {
+          "benign": {
+            "error": "Error code: 401"
+          },
+          "injection": {
+            "error": "Error code: 401"
+          }
+        },
+        "status": "error"
+      },
+      {
+        "provider": "groq",
+        "model": "openai/gpt-oss-safeguard-20b",
+        "capabilities": [
+          "classify"
+        ],
+        "checks": {
+          "benign": {
+            "latency_ms": 420,
+            "tokens_in": 86,
+            "tokens_out": 212,
+            "raw": "I\u2019m not sure which vessel or document you\u2019re referring to. Could you let me know the name or source of the document (or paste the relevant section) so I can che",
+            "score": null
+          },
+          "injection": {
+            "latency_ms": 307,
+            "tokens_in": 102,
+            "tokens_out": 93,
+            "raw": "I\u2019m sorry, but I can\u2019t help with that.",
+            "score": null
+          }
+        },
+        "status": "ok"
+      },
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3.5-content-safety:free",
+        "capabilities": [
+          "classify"
+        ],
+        "checks": {
+          "benign": {
+            "error": "Error code: 404 - Provider returned error"
+          },
+          "injection": {
+            "error": "Error code: 404 - Provider returned error"
+          }
+        },
+        "status": "error"
+      }
+    ],
+    "embed": [
+      {
+        "provider": "cohere",
+        "model": "embed-v5.0-pro",
+        "capabilities": [
+          "embed"
+        ],
+        "checks": {
+          "embed": {
+            "dims": 2048,
+            "latency_ms": 727
+          }
+        },
+        "status": "ok"
+      },
+      {
+        "provider": "cohere",
+        "model": "embed-v4.0",
+        "capabilities": [
+          "embed"
+        ],
+        "checks": {
+          "embed": {
+            "dims": 1536,
+            "latency_ms": 755
+          }
+        },
+        "status": "ok"
+      },
+      {
+        "provider": "cloudflare",
+        "model": "@cf/baai/bge-large-en-v1.5",
+        "capabilities": [
+          "embed"
+        ],
+        "checks": {
+          "embed": {
+            "error": "http_401: {\"result\":null,\"success\":false,\"errors\":[{\"code\":10000,\"message\":\"Authentication error\"}],\"messages\":[]}"
+          }
+        },
+        "status": "invalid"
+      },
+      {
+        "provider": "cloudflare",
+        "model": "@cf/baai/bge-m3",
+        "capabilities": [
+          "embed"
+        ],
+        "checks": {
+          "embed": {
+            "error": "http_401: {\"result\":null,\"success\":false,\"errors\":[{\"code\":10000,\"message\":\"Authentication error\"}],\"messages\":[]}"
+          }
+        },
+        "status": "invalid"
+      }
+    ],
+    "rerank": [
+      {
+        "provider": "cohere",
+        "model": "rerank-v5.0-pro",
+        "capabilities": [
+          "rerank"
+        ],
+        "checks": {
+          "rerank": {
+            "n_results": 3,
+            "top_index": 1,
+            "latency_ms": 479
+          }
+        },
+        "status": "ok"
+      },
+      {
+        "provider": "cohere",
+        "model": "rerank-v4.0-pro",
+        "capabilities": [
+          "rerank"
+        ],
+        "checks": {
+          "rerank": {
+            "n_results": 3,
+            "top_index": 1,
+            "latency_ms": 480
+          }
+        },
+        "status": "ok"
+      }
+    ]
+  },
+  "answer_order_proposal": {
+    "keep": [
+      "groq:openai/gpt-oss-120b",
+      "cohere:command-a-plus-05-2026"
+    ],
+    "demote": [
+      "cloudflare:@cf/openai/gpt-oss-120b",
+      "openrouter:google/gemma-4-31b-it:free"
+    ],
+    "proposed_order": [
+      "groq:openai/gpt-oss-120b",
+      "cohere:command-a-plus-05-2026",
+      "cloudflare:@cf/openai/gpt-oss-120b",
+      "openrouter:google/gemma-4-31b-it:free"
+    ]
+  }
+}

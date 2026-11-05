@@ -217,3 +217,65 @@ def test_tool_call_passthrough(monkeypatch):
     )
     assert res.tool_calls[0].name == "add"
     assert res.tool_calls[0].arguments == {"a": 2, "b": 3}
+
+
+def test_cache_key_isolation_between_models(tmp_path, monkeypatch):
+    """Verify that two models receiving the exact same messages do not share a cache entry."""
+    from sentinel.router.cache import OnDiskCache
+
+    cache_dir = tmp_path / "responses"
+    disk_cache = OnDiskCache(cache_dir)
+
+    entry_a = ChainEntry(provider="fake", model="model-alpha", capabilities=["chat"])
+    entry_b = ChainEntry(provider="fake", model="model-beta", capabilities=["chat"])
+
+    cfg_a = router_mod.ModelsConfig(
+        roles={"answer": [entry_a]},
+        limits={"fake": ProviderLimit(rpm=60_000, retries=1, timeout_s=5)},
+    )
+    cfg_b = router_mod.ModelsConfig(
+        roles={"answer": [entry_b]},
+        limits={"fake": ProviderLimit(rpm=60_000, retries=1, timeout_s=5)},
+    )
+
+    rt_a = Runtime(cfg_a, use_cache=True)
+    rt_a.cache = disk_cache
+    rt_b = Runtime(cfg_b, use_cache=True)
+    rt_b.cache = disk_cache
+
+    patch_factory(
+        monkeypatch,
+        {
+            "model-alpha": FakeModel(lambda _m: OkMsg("Answer from Alpha")),
+            "model-beta": FakeModel(lambda _m: OkMsg("Answer from Beta")),
+        },
+    )
+
+    msgs = [{"role": "user", "content": "Identical query for both models"}]
+
+    # 1. First model call
+    res_a = call("answer", msgs, runtime=rt_a)
+    assert res_a.content == "Answer from Alpha"
+    assert res_a.meta.model == "model-alpha"
+
+    # 2. Second model call with identical query must NOT hit model A's cache
+    res_b = call("answer", msgs, runtime=rt_b)
+    assert res_b.content == "Answer from Beta"
+    assert res_b.meta.model == "model-beta"
+
+    # 3. Two distinct cache entries must exist on disk
+    cached_files = list((cache_dir / "chat").glob("*.json"))
+    assert len(cached_files) == 2
+
+    # 4. Repeated calls hit their respective isolated caches
+    patch_factory(
+        monkeypatch,
+        {
+            "model-alpha": FakeModel(lambda _m: OkMsg("MUTATED Alpha")),
+            "model-beta": FakeModel(lambda _m: OkMsg("MUTATED Beta")),
+        },
+    )
+    cached_res_a = call("answer", msgs, runtime=rt_a)
+    cached_res_b = call("answer", msgs, runtime=rt_b)
+    assert cached_res_a.content == "Answer from Alpha"
+    assert cached_res_b.content == "Answer from Beta"

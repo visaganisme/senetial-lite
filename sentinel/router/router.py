@@ -189,7 +189,15 @@ def _try_entry(
     budget: RunBudget | None,
 ) -> tuple[bool, CallResult, str]:
     limit = runtime.limit_for(entry.provider)
-    cache_payload = {"m": [str(m) for m in messages]} if tools is None else None
+    cache_payload = (
+        {
+            "role": role,
+            "entry": entry.key,
+            "m": [str(m) for m in messages],
+        }
+        if tools is None
+        else None
+    )
     if runtime.cache and cache_payload:
         cached = runtime.cache.get(cache_ns, cache_payload)
         if cached:

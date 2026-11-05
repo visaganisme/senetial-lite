@@ -2,61 +2,171 @@
   {
     "model": "groq/openai/gpt-oss-120b",
     "provider": "groq",
-    "unprotected_block_rate": 0.0,
-    "unprotected_breach_rate": 1.0,
-    "protected_block_rate": 0.25,
-    "protected_breach_rate": 0.75,
-    "false_positive_rate": 0.0,
-    "unprotected_latency_ms": 3983.2,
-    "protected_latency_ms": 2998.1,
-    "overhead_ms": 0.0
+    "total_attack_runs": 30,
+    "unprotected": {
+      "breach_rate": 0.0,
+      "block_rate": 1.0,
+      "blocked_by_gateway_rate": 0.0,
+      "refused_by_model_rate": 1.0,
+      "inconclusive_rate": 0.0,
+      "errors": 0,
+      "error_rate": 0.0,
+      "latency_ms": 2911.45,
+      "guard_latency_ms": 0.0
+    },
+    "protected": {
+      "breach_rate": 0.0,
+      "block_rate": 1.0,
+      "blocked_by_gateway_rate": 1.0,
+      "refused_by_model_rate": 0.0,
+      "inconclusive_rate": 0.0,
+      "errors": 0,
+      "error_rate": 0.0,
+      "latency_ms": 32.69,
+      "guard_latency_ms": 32.48
+    },
+    "benign": {
+      "total_questions": 10,
+      "blocks": 0,
+      "errors": 6,
+      "false_positive_rate": 0.0
+    },
+    "overhead_ms": -2878.76
   },
   {
     "model": "cohere/command-a-plus-05-2026",
     "provider": "cohere",
-    "unprotected_block_rate": 0.0,
-    "unprotected_breach_rate": 1.0,
-    "protected_block_rate": 0.25,
-    "protected_breach_rate": 0.75,
-    "false_positive_rate": 0.0,
-    "unprotected_latency_ms": 8624.3,
-    "protected_latency_ms": 5448.9,
-    "overhead_ms": 0.0
+    "total_attack_runs": 30,
+    "unprotected": {
+      "breach_rate": 0.4483,
+      "block_rate": 0.4483,
+      "blocked_by_gateway_rate": 0.0,
+      "refused_by_model_rate": 0.4483,
+      "inconclusive_rate": 0.1034,
+      "errors": 1,
+      "error_rate": 0.0333,
+      "latency_ms": 6063.18,
+      "guard_latency_ms": 0.0
+    },
+    "protected": {
+      "breach_rate": 0.0,
+      "block_rate": 1.0,
+      "blocked_by_gateway_rate": 1.0,
+      "refused_by_model_rate": 0.0,
+      "inconclusive_rate": 0.0,
+      "errors": 0,
+      "error_rate": 0.0,
+      "latency_ms": 11.43,
+      "guard_latency_ms": 11.33
+    },
+    "benign": {
+      "total_questions": 10,
+      "blocks": 0,
+      "errors": 10,
+      "false_positive_rate": 0.0
+    },
+    "overhead_ms": -6051.75
   },
   {
     "model": "cohere/command-r7b-12-2024",
     "provider": "cohere",
-    "unprotected_block_rate": 0.0,
-    "unprotected_breach_rate": 1.0,
-    "protected_block_rate": 0.5,
-    "protected_breach_rate": 0.5,
-    "false_positive_rate": 0.0,
-    "unprotected_latency_ms": 4784.3,
-    "protected_latency_ms": 4444.2,
-    "overhead_ms": 0.0
+    "total_attack_runs": 30,
+    "unprotected": {
+      "breach_rate": 0.9333,
+      "block_rate": 0.0667,
+      "blocked_by_gateway_rate": 0.0,
+      "refused_by_model_rate": 0.0667,
+      "inconclusive_rate": 0.0,
+      "errors": 0,
+      "error_rate": 0.0,
+      "latency_ms": 6022.15,
+      "guard_latency_ms": 0.0
+    },
+    "protected": {
+      "breach_rate": 0.0,
+      "block_rate": 1.0,
+      "blocked_by_gateway_rate": 1.0,
+      "refused_by_model_rate": 0.0,
+      "inconclusive_rate": 0.0,
+      "errors": 0,
+      "error_rate": 0.0,
+      "latency_ms": 12.33,
+      "guard_latency_ms": 12.22
+    },
+    "benign": {
+      "total_questions": 10,
+      "blocks": 0,
+      "errors": 0,
+      "false_positive_rate": 0.0
+    },
+    "overhead_ms": -6009.82
   },
   {
     "model": "groq/qwen/qwen3.8-27b",
     "provider": "groq",
-    "unprotected_block_rate": 0.0,
-    "unprotected_breach_rate": 1.0,
-    "protected_block_rate": 0.25,
-    "protected_breach_rate": 0.75,
-    "false_positive_rate": 0.0,
-    "unprotected_latency_ms": 3087.8,
-    "protected_latency_ms": 3630.6,
-    "overhead_ms": 542.8
+    "total_attack_runs": 30,
+    "unprotected": {
+      "breach_rate": 0.0,
+      "block_rate": 0.5,
+      "blocked_by_gateway_rate": 0.0,
+      "refused_by_model_rate": 0.5,
+      "inconclusive_rate": 0.5,
+      "errors": 18,
+      "error_rate": 0.6,
+      "latency_ms": 1563.69,
+      "guard_latency_ms": 0.0
+    },
+    "protected": {
+      "breach_rate": 0.0,
+      "block_rate": 1.0,
+      "blocked_by_gateway_rate": 1.0,
+      "refused_by_model_rate": 0.0,
+      "inconclusive_rate": 0.0,
+      "errors": 0,
+      "error_rate": 0.0,
+      "latency_ms": 11.3,
+      "guard_latency_ms": 11.21
+    },
+    "benign": {
+      "total_questions": 10,
+      "blocks": 0,
+      "errors": 10,
+      "false_positive_rate": 0.0
+    },
+    "overhead_ms": -1552.39
   },
   {
     "model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
     "provider": "openrouter",
-    "unprotected_block_rate": 0.0,
-    "unprotected_breach_rate": 1.0,
-    "protected_block_rate": 0.25,
-    "protected_breach_rate": 0.75,
-    "false_positive_rate": 0.0,
-    "unprotected_latency_ms": 6834.3,
-    "protected_latency_ms": 5256.6,
-    "overhead_ms": 0.0
+    "total_attack_runs": 30,
+    "unprotected": {
+      "breach_rate": 0.1333,
+      "block_rate": 0.1333,
+      "blocked_by_gateway_rate": 0.0,
+      "refused_by_model_rate": 0.1333,
+      "inconclusive_rate": 0.7333,
+      "errors": 0,
+      "error_rate": 0.0,
+      "latency_ms": 6833.92,
+      "guard_latency_ms": 0.0
+    },
+    "protected": {
+      "breach_rate": 0.0,
+      "block_rate": 1.0,
+      "blocked_by_gateway_rate": 1.0,
+      "refused_by_model_rate": 0.0,
+      "inconclusive_rate": 0.0,
+      "errors": 0,
+      "error_rate": 0.0,
+      "latency_ms": 13.05,
+      "guard_latency_ms": 12.9
+    },
+    "benign": {
+      "total_questions": 10,
+      "blocks": 0,
+      "errors": 0,
+      "false_positive_rate": 0.0
+    },
+    "overhead_ms": -6820.87
   }
 ]

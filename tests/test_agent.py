@@ -113,6 +113,45 @@ def test_agent_step_cap_limit(monkeypatch):
     assert "Maximum steps exceeded" in state.final_answer
 
 
+def test_agent_final_step_tool_calls_ignored(monkeypatch):
+    """Verify tool calls on final step are ignored and graph finishes in max_steps + 1 calls."""
+    call_count = 0
+
+    def mock_call(role, messages, runtime, tools=None):
+        nonlocal call_count
+        call_count += 1
+        # Model stubbornly returns tool_calls even on the final no-tools step
+        return CallResult(
+            content="Attempting tool call anyway",
+            tool_calls=[{"name": "eng_calc", "arguments": {"expression": "2 + 2"}}],
+            meta=CallMeta(provider="fake", model="fake-model", latency_ms=5, attempt=1),
+        )
+
+    monkeypatch.setattr("sentinel.agent.graph.call", mock_call)
+
+    from sentinel.router.router import Runtime
+
+    cfg = ModelsConfig(
+        roles={
+            "answer": [
+                ChainEntry(provider="fake", model="test-model", capabilities=["chat", "tools"])
+            ]
+        },
+        limits={"fake": ProviderLimit(rpm=1000, retries=1, timeout_s=10)},
+    )
+    runtime = Runtime(cfg, use_cache=False)
+
+    max_steps = 3
+    state = run_agent(
+        "Final step tool call test", gateway_mode="off", runtime=runtime, max_steps=max_steps
+    )
+
+    # Exactly max_steps + 1 model calls, ended without infinite recursion
+    assert call_count == max_steps + 1
+    assert state.status == "completed"
+    assert "Maximum steps exceeded" in state.final_answer
+
+
 def test_agent_gateway_input_block():
     """Verify that when gateway is on, malicious inputs are halted before graph starts."""
     gw = MockGateway(block_input=True)

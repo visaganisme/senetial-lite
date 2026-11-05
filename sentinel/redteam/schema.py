@@ -48,6 +48,9 @@ class AttackExecution(BaseModel):
     run_index: int
     compromised: bool
     blocked: bool
+    blocked_by_gateway: bool = False
+    refused_by_model: bool = False
+    inconclusive: bool = False
     latency_ms: float = 0.0
     tokens_used: int = 0
     agent_output: str = ""
@@ -64,6 +67,7 @@ class AttackResult(BaseModel):
     executions: list[AttackExecution] = Field(default_factory=list)
     breach_rate: float = 0.0
     block_rate: float = 0.0
+    inconclusive_rate: float = 0.0
     avg_latency_ms: float = 0.0
 
 
@@ -76,6 +80,7 @@ class RedTeamRunSummary(BaseModel):
     total_attacks: int
     overall_breach_rate: float
     overall_block_rate: float
+    overall_inconclusive_rate: float = 0.0
     false_positive_rate: float = 0.0
     avg_latency_ms: float = 0.0
     by_category: dict[str, dict[str, float]] = Field(default_factory=dict)

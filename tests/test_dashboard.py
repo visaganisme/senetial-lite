@@ -16,7 +16,7 @@ def test_dashboard_root_html(client):
     resp = client.get("/")
     assert resp.status_code == 200
     assert "text/html" in resp.headers["content-type"]
-    assert "Sentinel — AI Agent Security Gateway Dashboard" in resp.text
+    assert "Sentinel Lite — Cyber Defense Gateway" in resp.text
     assert "runComparison" in resp.text
 
 
@@ -48,11 +48,73 @@ def test_dashboard_api_results(client):
     assert "comparison" in data
 
 
-def test_dashboard_api_approve(client):
-    """Verify manual write operation approval endpoint."""
-    resp = client.post("/api/approve", json={"operation_id": "op-1234", "approved": True})
-    assert resp.status_code == 200
-    assert resp.json() == {"operation_id": "op-1234", "approved": True}
+def test_dashboard_api_approve_flow(client):
+    """Verify approval workflow: 404 on unknown ID, execution on ID, 404 after resolution."""
+    from sentinel.gateway.approvals import register_pending_approval
+
+    # 1. Unknown ID returns 404
+    resp_unknown = client.post(
+        "/api/approve", json={"operation_id": "op_unknown_999", "approved": True}
+    )
+    assert resp_unknown.status_code == 404
+    assert "not found" in resp_unknown.json()["detail"].lower()
+
+    # 2. Register a pending operation
+    register_pending_approval(
+        operation_id="op_unit_test_01",
+        tool_name="notes_tasks_write",
+        args={"title": "test_approval.txt", "content": "Approved write content"},
+        call_id="call_test_0",
+        current_state=None,
+    )
+
+    # 3. Approve it
+    resp_approve = client.post(
+        "/api/approve", json={"operation_id": "op_unit_test_01", "approved": True}
+    )
+    assert resp_approve.status_code == 200
+    data = resp_approve.json()
+    assert data["operation_id"] == "op_unit_test_01"
+    assert data["approved"] is True
+    assert data["status"] == "executed"
+
+    # 4. Attempting to approve again returns 404 (already resolved)
+    resp_again = client.post(
+        "/api/approve", json={"operation_id": "op_unit_test_01", "approved": True}
+    )
+    assert resp_again.status_code == 404
+
+
+def test_dashboard_upload_path_traversal(client):
+    """Verify upload endpoint rejects path traversal filenames like '../../x.md'."""
+    resp = client.post(
+        "/api/upload",
+        files={"file": ("../../x.md", b"# Malicious header\ncontent", "text/markdown")},
+    )
+    assert resp.status_code == 400
+    assert "traversal" in resp.json()["detail"].lower()
+
+
+def test_dashboard_upload_size_limit(client):
+    """Verify upload endpoint rejects files exceeding 5 MB."""
+    oversized_content = b"x" * (5 * 1024 * 1024 + 10)
+    resp = client.post(
+        "/api/upload",
+        files={"file": ("huge_file.txt", oversized_content, "text/plain")},
+    )
+    assert resp.status_code == 413
+    assert "exceeds maximum" in resp.json()["detail"].lower()
+
+
+def test_dashboard_upload_no_overwrite(client):
+    """Verify upload endpoint rejects overwriting an existing document."""
+    # CommissioningChecklist.md already exists in knowledge base / corpus
+    resp = client.post(
+        "/api/upload",
+        files={"file": ("CommissioningChecklist.md", b"# Duplicate content", "text/markdown")},
+    )
+    assert resp.status_code == 409
+    assert "already exists" in resp.json()["detail"].lower()
 
 
 def test_dashboard_api_query_protected_block(client):

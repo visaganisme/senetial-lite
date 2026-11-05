@@ -1,14 +1,14 @@
-# Sentinel Gateway — Model Usability & Routing Analysis
+# Sentinel Gateway — Model Usability & Routing Benchmark
 
-Which LLM architectures remain cost-effective and secure under the Sentinel Gateway?
+Empirical measurement of model suitability under the Sentinel Security Gateway.
+Generated from computed benchmark data without hardcoded assertions.
 
-| Role | Selected Model | Gateway Compatibility | Latency Profile | Tier Suitability |
-|---|---|---|---|---|
-| **Primary Answer** | `groq/openai/gpt-oss-120b` | Excellent (100% block) | Low (~450 ms) | Best for interactive technical RAG |
-| **Secondary Answer** | `cohere/command-a-plus-05-2026` | High (100% block) | Moderate (~800 ms) | High reasoning & grounded tool calls |
-| **Fast / Cheap** | `cohere/command-r7b-12-2024` | High (100% block) | Very Low (~350 ms) | Best for summaries & quick extractions |
-| **Evals / Judge** | `groq/qwen/qwen3.8-27b` | High (100% block) | Ultra-fast (~180 ms) | Ideal for independent red-team judging |
-| **Fallback Judge** | `openrouter/nvidia/nemotron-3-ultra-550b-a55b:free` | Moderate (100% block) | High (~1100 ms) | Safe cross-family verification |
+## Model Usability Breakdown
 
-## Summary Recommendation
-The **Groq + Cohere** pairing provides the optimal balance of throughput, zero-leakage security, and low latency for Sentinel Lite deployment.
+| Model | Provider | Blocked by Gateway % | Refused by Model % | Breach Rate | Inconclusive Rate | Attack Errors | Benign FPR | Protected Latency (ms) | Guard Time (ms) | Latency Overhead (ms) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `groq/openai/gpt-oss-120b` | groq | 100.0% | 0.0% | 0.0% | 0.0% | 0 | 0.0% | 32.7 | 32.5 | -2878.76 |
+| `cohere/command-a-plus-05-2026` | cohere | 100.0% | 0.0% | 0.0% | 0.0% | 0 | 0.0% | 11.4 | 11.3 | -6051.75 |
+| `cohere/command-r7b-12-2024` | cohere | 100.0% | 0.0% | 0.0% | 0.0% | 0 | 0.0% | 12.3 | 12.2 | -6009.82 |
+| `groq/qwen/qwen3.8-27b` | groq | 100.0% | 0.0% | 0.0% | 0.0% | 0 | 0.0% | 11.3 | 11.2 | -1552.39 |
+| `openrouter/nvidia/nemotron-3-ultra-550b-a55b:free` | openrouter | 100.0% | 0.0% | 0.0% | 0.0% | 0 | 0.0% | 13.1 | 12.9 | -6820.87 |

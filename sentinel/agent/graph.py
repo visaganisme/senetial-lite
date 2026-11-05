@@ -46,14 +46,8 @@ def _create_agent_graph(runtime: Runtime, gateway: Any | None = None):
 
     def model_node(state: AgentState) -> dict[str, Any]:
         step = state.current_step + 1
-        if step > state.max_steps:
-            # Step exceeded: do one last synthesis invocation without tools
-            avail_tools = []
-        elif step == state.max_steps:
-            # On final step, don't offer tools; force the model to synthesize the final answer
-            avail_tools = []
-        else:
-            avail_tools = tools
+        is_final_step = step > state.max_steps
+        avail_tools = [] if is_final_step else tools
 
         try:
             call_res = call("answer", state.messages, runtime=runtime, tools=avail_tools)
@@ -76,10 +70,10 @@ def _create_agent_graph(runtime: Runtime, gateway: Any | None = None):
         new_messages = list(state.messages)
         content_text = call_res.content or ""
 
-        # Format assistant message
-        assistant_msg: dict[str, Any] = {"role": "assistant", "content": content_text}
-        if call_res.tool_calls:
-            assistant_msg["tool_calls"] = [
+        # If on final step, ignore any tool calls the model attempted
+        tool_calls_to_record = []
+        if not is_final_step and call_res.tool_calls:
+            tool_calls_to_record = [
                 {
                     "name": tc.name,
                     "args": tc.arguments,
@@ -88,6 +82,11 @@ def _create_agent_graph(runtime: Runtime, gateway: Any | None = None):
                 }
                 for i, tc in enumerate(call_res.tool_calls)
             ]
+
+        # Format assistant message
+        assistant_msg: dict[str, Any] = {"role": "assistant", "content": content_text}
+        if tool_calls_to_record:
+            assistant_msg["tool_calls"] = tool_calls_to_record
         new_messages.append(assistant_msg)
 
         # Check for citations in text
@@ -99,13 +98,25 @@ def _create_agent_graph(runtime: Runtime, gateway: Any | None = None):
             for c in found:
                 citations.append({"citation": c, "step": step})
 
+        # Determine status and final answer
+        if is_final_step:
+            status = "completed"
+            if call_res.tool_calls or not content_text.strip():
+                final_ans = "Execution limit reached: Maximum steps exceeded."
+            else:
+                final_ans = content_text.strip()
+        else:
+            status = state.status
+            final_ans = content_text if not tool_calls_to_record else state.final_answer
+
         return {
             "messages": new_messages,
             "current_step": step,
             "tokens_used": tokens,
             "model_used": model_name,
             "citations": citations,
-            "final_answer": content_text if not call_res.tool_calls else state.final_answer,
+            "final_answer": final_ans,
+            "status": status,
         }
 
     def tool_node(state: AgentState) -> dict[str, Any]:
@@ -114,6 +125,7 @@ def _create_agent_graph(runtime: Runtime, gateway: Any | None = None):
         new_messages = list(state.messages)
         trace = list(state.tool_trace)
         decisions = list(state.gateway_decisions)
+        guard_time = 0.0
 
         for i, tc in enumerate(tool_calls):
             tname = tc.get("name")
@@ -123,7 +135,9 @@ def _create_agent_graph(runtime: Runtime, gateway: Any | None = None):
 
             # If gateway is ON and provided, check tool guard
             if state.gateway_mode == "on" and gateway is not None:
+                t_tool = time.perf_counter()
                 decision = gateway.check_tool(tname, targs, state)
+                guard_time += (time.perf_counter() - t_tool) * 1000
                 decisions.append(decision.model_dump())
                 if decision.action == "block":
                     result_text = f"Gateway Blocked: {decision.reason}"
@@ -140,19 +154,50 @@ def _create_agent_graph(runtime: Runtime, gateway: Any | None = None):
                     )
                     continue
                 if decision.action == "escalate":
-                    result_text = f"Gateway Escalated (Approval Required): {decision.reason}"
-                    tool_entry["status"] = "escalated"
-                    tool_entry["result"] = result_text
-                    trace.append(tool_entry)
-                    new_messages.append(
-                        {
-                            "role": "tool",
-                            "name": tname,
-                            "content": result_text,
-                            "tool_call_id": call_id,
-                        }
+                    import uuid
+
+                    op_id = decision.metadata.get("operation_id") or f"op_{uuid.uuid4().hex[:8]}"
+                    decision.metadata["operation_id"] = op_id
+                    decision.metadata["tool"] = tname
+                    decision.metadata["args"] = targs
+                    # Replace last decision in decisions list with updated metadata
+                    if decisions:
+                        decisions[-1]["metadata"]["operation_id"] = op_id
+                        decisions[-1]["metadata"]["tool"] = tname
+                        decisions[-1]["metadata"]["args"] = targs
+                    tool_entry["status"] = "awaiting_approval"
+                    tool_entry["operation_id"] = op_id
+                    tool_entry["result"] = (
+                        f"Paused: Write operation '{tname}' requires human operator approval. "
+                        f"Operation ID: {op_id}"
                     )
-                    continue
+                    trace.append(tool_entry)
+
+                    from sentinel.gateway.approvals import register_pending_approval
+
+                    register_pending_approval(
+                        operation_id=op_id,
+                        tool_name=tname,
+                        args=targs,
+                        call_id=call_id,
+                        current_state=state,
+                    )
+
+                    return {
+                        "messages": new_messages,
+                        "tool_trace": trace,
+                        "gateway_decisions": decisions,
+                        "guard_latency_ms": state.guard_latency_ms + guard_time,
+                        "status": "awaiting_approval",
+                        "status_reason": (
+                            f"Paused at write operation '{tname}' (ID: {op_id}). "
+                            "Awaiting human approval."
+                        ),
+                        "final_answer": (
+                            f"Operation '{tname}' requires human operator authorization. "
+                            f"Awaiting approval for operation ID '{op_id}'."
+                        ),
+                    }
 
             # Execute tool in unprotected mode (or if gateway allowed)
             tool_fn = tool_map.get(tname)
@@ -176,9 +221,11 @@ def _create_agent_graph(runtime: Runtime, gateway: Any | None = None):
                                 else result_text
                             )
                             if isinstance(parsed_chunks, list):
+                                t_ret = time.perf_counter()
                                 ret_dec, cleaned = gateway.pass_retrieval(
                                     parsed_chunks, user_access="internal"
                                 )
+                                guard_time += (time.perf_counter() - t_ret) * 1000
                                 decisions.append(ret_dec.model_dump())
                                 if len(cleaned) < len(parsed_chunks):
                                     tool_entry["quarantined"] = len(parsed_chunks) - len(cleaned)
@@ -200,10 +247,17 @@ def _create_agent_graph(runtime: Runtime, gateway: Any | None = None):
                 }
             )
 
-        return {"messages": new_messages, "tool_trace": trace, "gateway_decisions": decisions}
+        return {
+            "messages": new_messages,
+            "tool_trace": trace,
+            "gateway_decisions": decisions,
+            "guard_latency_ms": state.guard_latency_ms + guard_time,
+        }
 
     def should_continue(state: AgentState) -> str:
-        if state.status in ("completed", "error", "blocked"):
+        if state.status in ("completed", "error", "blocked", "awaiting_approval"):
+            return "finish"
+        if state.current_step > state.max_steps:
             return "finish"
         last_msg = state.messages[-1] if state.messages else {}
         if last_msg.get("tool_calls"):
@@ -249,7 +303,9 @@ def run_agent(
 
     # In gateway mode ON, intercept input first
     if gateway_mode == "on" and gateway is not None:
+        t_in = time.perf_counter()
         input_decision = gateway.pass_input(prompt)
+        initial_state.guard_latency_ms += (time.perf_counter() - t_in) * 1000
         initial_state.gateway_decisions.append(input_decision.model_dump())
         if input_decision.action == "block":
             initial_state.status = "blocked"
@@ -258,17 +314,21 @@ def run_agent(
                 f"Security Gateway: Request blocked. Reason: {input_decision.reason}"
             )
             initial_state.latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
+            initial_state.guard_latency_ms = round(initial_state.guard_latency_ms, 2)
             return initial_state
 
     app = _create_agent_graph(rt, gateway=gateway)
-    res = app.invoke(initial_state)
+    rec_limit = max_steps * 3 + 5
+    res = app.invoke(initial_state, config={"recursion_limit": rec_limit})
 
     final_state = AgentState.model_validate(res)
     final_state.latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
     # In gateway mode ON, intercept output guard
     if gateway_mode == "on" and gateway is not None and final_state.final_answer:
+        t_out = time.perf_counter()
         output_decision = gateway.pass_output(final_state.final_answer, final_state)
+        final_state.guard_latency_ms += (time.perf_counter() - t_out) * 1000
         final_state.gateway_decisions.append(output_decision.model_dump())
         if output_decision.action == "block":
             final_state.status = "blocked"
@@ -277,4 +337,5 @@ def run_agent(
                 f"Security Gateway: Output suppressed. Reason: {output_decision.reason}"
             )
 
+    final_state.guard_latency_ms = round(final_state.guard_latency_ms, 2)
     return final_state

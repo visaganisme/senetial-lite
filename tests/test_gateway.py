@@ -155,3 +155,66 @@ def test_gateway_audit_logging(tmp_path: Path):
     assert recent[0].action == DecisionAction.allow
     assert recent[1].action == DecisionAction.block
     assert log_file.exists()
+
+
+def test_input_guard_classifier_scores(monkeypatch):
+    """Verify input guard handles outputs: 0.99 (block), 0.0004 (allow), and 'garbage' (failure)."""
+    from types import SimpleNamespace
+
+    from sentinel.router.router import Runtime
+    from sentinel.router.schema import ChainEntry, ModelsConfig
+
+    dummy_entry = ChainEntry(
+        provider="groq",
+        model="meta-llama/llama-prompt-guard-2-8b",
+        capabilities=["chat"],
+    )
+    fake_config = ModelsConfig(
+        roles={
+            "answer": [dummy_entry],
+            "injection_guard": [dummy_entry],
+        }
+    )
+    fake_runtime = Runtime(fake_config, use_cache=False)
+    monkeypatch.setattr(Runtime, "load", lambda **kw: fake_runtime)
+
+    # 1. Output 0.99 -> Injection blocked
+    monkeypatch.setattr(
+        "sentinel.router.router.call",
+        lambda role, msgs, runtime=None: SimpleNamespace(
+            content="0.99",
+            meta=SimpleNamespace(model="meta-llama/llama-prompt-guard-2-8b"),
+        ),
+    )
+    guard_high = InputGuard(use_classifier=True, threshold=0.5)
+    d_high = guard_high.check("What is the pump pressure?")
+    assert d_high.action == DecisionAction.block
+    assert d_high.confidence == 0.99
+    assert guard_high.classifier_failures == 0
+
+    # 2. Output 0.0004 -> Benign allowed
+    monkeypatch.setattr(
+        "sentinel.router.router.call",
+        lambda role, msgs, runtime=None: SimpleNamespace(
+            content="0.0004",
+            meta=SimpleNamespace(model="meta-llama/llama-prompt-guard-2-8b"),
+        ),
+    )
+    guard_low = InputGuard(use_classifier=True, threshold=0.5)
+    d_low = guard_low.check("What is the pump pressure?")
+    assert d_low.action == DecisionAction.allow
+    assert guard_low.classifier_failures == 0
+
+    # 3. Output 'garbage' -> Unparseable logged as failure, increments classifier_failures
+    monkeypatch.setattr(
+        "sentinel.router.router.call",
+        lambda role, msgs, runtime=None: SimpleNamespace(
+            content="garbage",
+            meta=SimpleNamespace(model="meta-llama/llama-prompt-guard-2-8b"),
+        ),
+    )
+    guard_garbage = InputGuard(use_classifier=True, threshold=0.5)
+    d_garbage = guard_garbage.check("What is the pump pressure?")
+    assert d_garbage.action == DecisionAction.allow
+    assert guard_garbage.classifier_failures == 1
+    assert "Unparseable classifier output" in d_garbage.metadata.get("classifier_error", "")

@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 import sentinel.config as cfg
 from sentinel.agent.graph import run_agent
+from sentinel.gateway.approvals import PENDING_APPROVALS, remove_pending_approval
 from sentinel.gateway.audit import AuditLogger
 from sentinel.gateway.gateway import SentinelGateway
 from sentinel.ingest.chunk import chunk_structure
@@ -90,6 +91,9 @@ def results_view() -> dict[str, Any]:
     return {"baseline": baseline, "comparison": comparison}
 
 
+MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5 MB
+
+
 @app.get("/api/documents")
 def list_documents() -> list[dict[str, Any]]:
     docs_list: list[dict[str, Any]] = []
@@ -113,9 +117,9 @@ def list_documents() -> list[dict[str, Any]]:
                         "category": category,
                         "size_kb": round(path.stat().st_size / 1024, 1),
                         "type": path.suffix.lower().replace(".", "").upper(),
-                        "status": "poisoned" if is_poisoned else "clean",
+                        "status": "poisoned" if is_poisoned else "active",
                         "badge": (
-                            "⚠️ Adversarial Poisoned Doc" if is_poisoned else "🟢 Verified Clean Doc"
+                            "⚠️ Adversarial Poisoned Doc" if is_poisoned else "Standard Document"
                         ),
                     }
                 )
@@ -124,22 +128,54 @@ def list_documents() -> list[dict[str, Any]]:
 
 @app.post("/api/upload")
 async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:  # noqa: B008
-    filename = file.filename or "uploaded_doc.txt"
-    ext = Path(filename).suffix.lower()
+    raw_filename = file.filename or ""
+    clean_name = Path(raw_filename).name
+
+    # Reject if filename contains directory traversal or differs from Path(filename).name
+    has_sep = "/" in raw_filename or "\\" in raw_filename or ".." in raw_filename
+    if not clean_name or raw_filename != clean_name or has_sep:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid filename '{raw_filename}': "
+                "path traversal and directory separators are not allowed."
+            ),
+        )
+
+    ext = Path(clean_name).suffix.lower()
     if ext not in (".pdf", ".md", ".txt"):
         raise HTTPException(
             status_code=400,
             detail="Only PDF (.pdf), Markdown (.md), and Text (.txt) files are supported.",
         )
 
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"File exceeds maximum allowed size of 5 MB "
+                f"({len(content)} bytes > {MAX_UPLOAD_SIZE} bytes)."
+            ),
+        )
+
     target_dir = cfg.BASE_DIR / "docs"
     target_dir.mkdir(parents=True, exist_ok=True)
-    target_path = target_dir / filename
+    target_path = target_dir / clean_name
 
-    content = await file.read()
+    # Never overwrite existing files in docs/ or docs_synthetic/
+    already_exists = target_path.exists() or (cfg.BASE_DIR / "docs_synthetic" / clean_name).exists()
+    if already_exists:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"File '{clean_name}' already exists in knowledge base. "
+                "Overwriting is not permitted."
+            ),
+        )
+
     target_path.write_bytes(content)
 
-    num_chunks = 0
     try:
         if ext == ".pdf":
             doc = parse_pdf(target_path, access_label="internal")
@@ -153,33 +189,39 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:  # no
             coll = client().get_collection("rag_structure_embed-v5-0-pro")
             vecs = embed_texts(embed_entries[0], [c.text for c in chunks])
             coll.add(
-                ids=[f"{filename}_{c.id}" for c in chunks],
+                ids=[f"{clean_name}_{c.id}" for c in chunks],
                 embeddings=vecs,
                 documents=[c.text for c in chunks],
                 metadatas=[
                     {
-                        "source": filename,
+                        "source": clean_name,
                         "page": c.page,
                         "section": c.section or "",
                         "access_label": "internal",
-                        "chunk_id": f"{filename}_{c.id}",
+                        "chunk_id": f"{clean_name}_{c.id}",
                         "strategy": "structure",
                     }
                     for c in chunks
                 ],
             )
         num_chunks = len(chunks)
-    except Exception:
-        # Fallback keyword search still finds the file on disk
-        pass
+    except Exception as e:
+        if target_path.exists():
+            target_path.unlink()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Document indexing failed: {e}",
+        ) from e
 
-    is_poisoned = "qa-vx-7" in filename.lower() or "poison" in filename.lower()
+    is_poisoned = "qa-vx-7" in clean_name.lower() or "poison" in clean_name.lower()
     return {
-        "filename": filename,
+        "filename": clean_name,
         "size_kb": round(len(content) / 1024, 1),
         "chunks_indexed": num_chunks,
-        "status": "poisoned" if is_poisoned else "clean",
-        "message": f"Successfully indexed '{filename}' into vector database ({num_chunks} chunks).",
+        "status": "poisoned" if is_poisoned else "active",
+        "message": (
+            f"Successfully indexed '{clean_name}' into vector database ({num_chunks} chunks)."
+        ),
     }
 
 
@@ -214,23 +256,85 @@ def query_view(req: QueryRequest) -> dict[str, Any]:
 def approve_view(req: ApprovalRequest) -> dict[str, Any]:
     if not req.operation_id:
         raise HTTPException(status_code=400, detail="Missing operation_id")
-    # Log approval audit decision
-    audit_logger.record(
-        guard="tool",  # type: ignore[arg-type]
-        decision=type(
-            "Obj",
-            (),
-            {
-                "action": "allow" if req.approved else "block",
-                "reason": (
-                    "Operator manually approved operation"
-                    if req.approved
-                    else "Operator rejected operation"
-                ),
-                "confidence": 1.0,
-                "metadata": {"operation_id": req.operation_id},
-            },
-        )(),
-        target=f"operation_id={req.operation_id}",
-    )
-    return {"operation_id": req.operation_id, "approved": req.approved}
+
+    pending = PENDING_APPROVALS.get(req.operation_id)
+    if not pending:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Operation '{req.operation_id}' not found or already resolved.",
+        )
+
+    tool_name = pending["tool_name"]
+    args = pending["args"]
+
+    if req.approved:
+        from sentinel.mcp_servers.tools import get_victim_tools
+
+        tools = get_victim_tools()
+        tool_map = {t.name: t for t in tools}
+        tool_fn = tool_map.get(tool_name)
+        if not tool_fn:
+            raise HTTPException(status_code=500, detail=f"Tool '{tool_name}' not available")
+
+        try:
+            result_text = tool_fn.invoke(args)
+        except Exception as e:
+            result_text = f"Execution error: {e}"
+
+        audit_logger.record(
+            guard="tool",  # type: ignore[arg-type]
+            decision=type(
+                "Obj",
+                (),
+                {
+                    "action": "allow",
+                    "reason": (
+                        f"Operator approved write operation '{tool_name}' "
+                        f"(ID: {req.operation_id})"
+                    ),
+                    "confidence": 1.0,
+                    "metadata": {
+                        "operation_id": req.operation_id,
+                        "tool": tool_name,
+                        "args": args,
+                    },
+                },
+            )(),
+            target=f"operation_id={req.operation_id} tool={tool_name}",
+        )
+        remove_pending_approval(req.operation_id)
+        return {
+            "operation_id": req.operation_id,
+            "approved": True,
+            "status": "executed",
+            "result": str(result_text),
+        }
+    else:
+        audit_logger.record(
+            guard="tool",  # type: ignore[arg-type]
+            decision=type(
+                "Obj",
+                (),
+                {
+                    "action": "block",
+                    "reason": (
+                        f"Operator rejected write operation '{tool_name}' "
+                        f"(ID: {req.operation_id})"
+                    ),
+                    "confidence": 1.0,
+                    "metadata": {
+                        "operation_id": req.operation_id,
+                        "tool": tool_name,
+                        "args": args,
+                    },
+                },
+            )(),
+            target=f"operation_id={req.operation_id} tool={tool_name}",
+        )
+        remove_pending_approval(req.operation_id)
+        return {
+            "operation_id": req.operation_id,
+            "approved": False,
+            "status": "cancelled",
+            "result": "Operation rejected by human operator.",
+        }

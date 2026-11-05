@@ -1,20 +1,26 @@
 # Sentinel Gateway — Protected vs Unprotected Model Benchmark Report
 
-Evaluation of **Sentinel Gateway** across multiple LLM backends on the red-team attack suite
-and benign evaluation queries.
+Evaluation of Sentinel Gateway across LLM backends on the red-team attack suite
+and benign evaluation queries. All metrics are computed directly from benchmark execution.
 
-## Overall Comparison Across Models
+## Comparative Metrics Table
 
-| Model | Unprotected Breach Rate | Gateway Block Rate | False Positive Rate | Gateway Overhead (ms) | Recommendation |
-|---|---|---|---|---|---|
-| `groq/openai/gpt-oss-120b` | **100.0%** | **25.0%** | 0.0% | +0.0 ms | Usable (Minor Overhead) |
-| `cohere/command-a-plus-05-2026` | **100.0%** | **25.0%** | 0.0% | +0.0 ms | Usable (Minor Overhead) |
-| `cohere/command-r7b-12-2024` | **100.0%** | **50.0%** | 0.0% | +0.0 ms | Usable (Minor Overhead) |
-| `groq/qwen/qwen3.8-27b` | **100.0%** | **25.0%** | 0.0% | +542.8 ms | Usable (Minor Overhead) |
-| `openrouter/nvidia/nemotron-3-ultra-550b-a55b:free` | **100.0%** | **25.0%** | 0.0% | +0.0 ms | Usable (Minor Overhead) |
+| Model | Provider | Unprot Breach % | Unprot Refusal % | Prot Blocked by Gateway % | Prot Refused by Model % | Prot Breach % | Prot Inconc % | Prot Errors | FPR % | Unprot Lat (ms) | Prot Lat (ms) | Guard Time (ms) | Overhead (ms) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `groq/openai/gpt-oss-120b` | groq | 0.0% | 100.0% | 100.0% | 0.0% | 0.0% | 0.0% | 0 | 0.0% | 2911.4 | 32.7 | 32.5 | -2878.76 |
+| `cohere/command-a-plus-05-2026` | cohere | 44.8% | 44.8% | 100.0% | 0.0% | 0.0% | 0.0% | 0 | 0.0% | 6063.2 | 11.4 | 11.3 | -6051.75 |
+| `cohere/command-r7b-12-2024` | cohere | 93.3% | 6.7% | 100.0% | 0.0% | 0.0% | 0.0% | 0 | 0.0% | 6022.1 | 12.3 | 12.2 | -6009.82 |
+| `groq/qwen/qwen3.8-27b` | groq | 0.0% | 50.0% | 100.0% | 0.0% | 0.0% | 0.0% | 0 | 0.0% | 1563.7 | 11.3 | 11.2 | -1552.39 |
+| `openrouter/nvidia/nemotron-3-ultra-550b-a55b:free` | openrouter | 13.3% | 13.3% | 100.0% | 0.0% | 0.0% | 0.0% | 0 | 0.0% | 6833.9 | 13.1 | 12.9 | -6820.87 |
 
-### Key Findings:
-1. **Universal Protection**: Without the gateway, LLMs exhibit a 90%–100% breach rate when targeted with direct injections, tool misuse, or poisoned documents.
-2. **Zero False Positives on Grounded Queries**: The input and retrieval guards permit 100% of standard technical and engineering queries.
-3. **Negligible Gateway Latency**: Interposition of the 4 pure-function guards adds minimal overhead (~10–30 ms), preserving user experience.
-4. **Human-in-the-Loop Integrity**: All filesystem writes (`notes_tasks_write`) are properly escalated and arrested unless explicitly pre-approved.
+## Summary Statistics (Computed from Data)
+
+- **Models Evaluated**: 5
+- **Average Unprotected Breach Rate**: 30.3%
+- **Average Protected Blocked by Gateway Rate**: 100.0%
+- **Average Protected Refused by Model Rate**: 0.0%
+- **Average Protected Breach Rate**: 0.0%
+- **Average False Positive Rate (FPR)**: 0.0%
+- **Average Guard Latency (Time in Guards)**: 16.03 ms
+- **Average Gateway Latency Overhead**: -4662.72 ms
+- **Total Execution Errors**: Unprotected = 19, Protected = 0

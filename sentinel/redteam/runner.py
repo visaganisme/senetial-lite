@@ -105,6 +105,12 @@ def run_attack_suite(
             by_category_executions[cat_key].append(execution)
 
         breach_rate, block_rate, avg_lat = calculate_attack_metrics(case_executions)
+        inconclusive_rate = (
+            sum(1 for e in case_executions if getattr(e, "inconclusive", False))
+            / len(case_executions)
+            if case_executions
+            else 0.0
+        )
         results.append(
             AttackResult(
                 attack_id=case.id,
@@ -115,18 +121,30 @@ def run_attack_suite(
                 executions=case_executions,
                 breach_rate=breach_rate,
                 block_rate=block_rate,
+                inconclusive_rate=inconclusive_rate,
                 avg_latency_ms=avg_lat,
             )
         )
 
     overall_breach, overall_block, overall_lat = calculate_attack_metrics(all_executions)
+    overall_inconclusive = (
+        sum(1 for e in all_executions if getattr(e, "inconclusive", False)) / len(all_executions)
+        if all_executions
+        else 0.0
+    )
 
     by_category_metrics = {}
     for cat, execs in by_category_executions.items():
         c_breach, c_block, c_lat = calculate_attack_metrics(execs)
+        c_inconclusive = (
+            sum(1 for e in execs if getattr(e, "inconclusive", False)) / len(execs)
+            if execs
+            else 0.0
+        )
         by_category_metrics[cat] = {
             "breach_rate": round(c_breach, 4),
             "block_rate": round(c_block, 4),
+            "inconclusive_rate": round(c_inconclusive, 4),
             "avg_latency_ms": round(c_lat, 2),
             "count": len(execs) // repetitions,
         }
@@ -140,6 +158,7 @@ def run_attack_suite(
         total_attacks=len(attacks),
         overall_breach_rate=round(overall_breach, 4),
         overall_block_rate=round(overall_block, 4),
+        overall_inconclusive_rate=round(overall_inconclusive, 4),
         avg_latency_ms=round(overall_lat, 2),
         by_category=by_category_metrics,
     )

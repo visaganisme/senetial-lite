@@ -19,7 +19,8 @@ class AgentState(BaseModel):
     final_answer: str = ""
     model_used: str = ""
     latency_ms: float = 0.0
+    guard_latency_ms: float = 0.0
     gateway_mode: Literal["on", "off"] = "off"
     gateway_decisions: list[dict[str, Any]] = Field(default_factory=list)
-    status: Literal["running", "completed", "error", "blocked"] = "running"
+    status: Literal["running", "completed", "error", "blocked", "awaiting_approval"] = "running"
     status_reason: str = ""

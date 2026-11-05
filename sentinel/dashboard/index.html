@@ -462,6 +462,23 @@
       display: flex;
       gap: 8px;
     }
+    .hitl-args {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      font-family: var(--font-mono, monospace);
+      font-size: 11px;
+      color: var(--text-dim, #94a3b8);
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .hitl-args-title {
+      font-weight: 600;
+      color: var(--text, #e2e8f0);
+      margin-bottom: 4px;
+    }
     .btn-approve {
       background: var(--success);
       color: #000;
@@ -740,6 +757,10 @@
       <div class="hitl-card" id="hitlCard">
         <div class="hitl-title">⚠️ Human Operator Authorization Required</div>
         <div class="hitl-text" id="hitlText">The agent attempted to execute a write operation. Do you authorize this action?</div>
+        <div class="hitl-args" id="hitlArgsBox" style="display:none;">
+          <div class="hitl-args-title">Target Tool & Exact Arguments:</div>
+          <pre id="hitlArgs" style="margin:0; font-family:inherit; font-size:inherit; color:inherit; white-space:pre-wrap;"></pre>
+        </div>
         <div class="hitl-actions">
           <button class="btn-approve" onclick="handleHITL(true)">✅ Authorize Operation</button>
           <button class="btn-reject" onclick="handleHITL(false)">❌ Reject & Abort</button>
@@ -882,6 +903,7 @@
       // Reset Matrix
       resetGuards();
       document.getElementById('hitlCard').style.display = 'none';
+      document.getElementById('hitlArgsBox').style.display = 'none';
       document.getElementById('unprotectedAnswer').innerText = "Running unprotected agent...";
       document.getElementById('protectedAnswer').innerText = "Running protected agent through 4-guard policy...";
 
@@ -929,9 +951,15 @@
 
           if (act === 'escalate') {
             hasEscalation = true;
-            pendingOperationId = d.metadata?.operation_id || 'op_file_write_01';
-            document.getElementById('hitlText').innerText = d.reason || 'Operation requires human operator authorization.';
-            document.getElementById('hitlCard').style.display = 'block';
+            pendingOperationId = d.metadata?.operation_id || null;
+            if (pendingOperationId) {
+              const toolName = d.metadata?.tool || 'unknown_tool';
+              const toolArgs = d.metadata?.args ? JSON.stringify(d.metadata.args, null, 2) : '{}';
+              document.getElementById('hitlText').innerText = `${d.reason || 'Operation requires authorization.'} (Operation ID: ${pendingOperationId})`;
+              document.getElementById('hitlArgs').innerText = `Tool: ${toolName}\nArguments:\n${toolArgs}`;
+              document.getElementById('hitlArgsBox').style.display = 'block';
+              document.getElementById('hitlCard').style.display = 'block';
+            }
           }
         });
 
@@ -1012,7 +1040,10 @@
     }
 
     async function handleHITL(approved) {
-      if (!pendingOperationId) pendingOperationId = 'op_file_write_01';
+      if (!pendingOperationId) {
+        alert("No pending operation to approve or reject.");
+        return;
+      }
       try {
         const res = await fetch('/api/approve', {
           method: 'POST',
@@ -1021,6 +1052,7 @@
         });
         const data = await res.json();
         document.getElementById('hitlCard').style.display = 'none';
+        document.getElementById('hitlArgsBox').style.display = 'none';
         alert(approved ? "✅ Operation authorized by operator." : "❌ Operation rejected by operator.");
         refreshAudit();
       } catch (err) {

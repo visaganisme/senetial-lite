@@ -15,6 +15,10 @@ OUTPUT_LEAK_PATTERNS = [
     r"(?i)openrouter_api_key\s*=\s*['\"][A-Za-z0-9_\-]+['\"]",
     r"!\[[^\]]*\]\(https?://[^\)]+\)",  # Markdown image exfiltration
     r"(?i)https?://(?:attacker|evil|malicious)[^\s\)\'\"]+",  # Attacker links
+    r"-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----",  # Private keys
+    r"(?i)(?:password|secret_key|admin_password|auth_token)\s*[:=]\s*['\"][^\s'\"]{4,}['\"]",
+    r"\b[0-9]{3}-[0-9]{2}-[0-9]{4}\b",  # SSN
+    r"\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14})\b",  # Credit Card numbers
 ]
 
 HAZARDOUS_ADVICE_PATTERNS = [
